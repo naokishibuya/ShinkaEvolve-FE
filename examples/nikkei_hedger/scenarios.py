@@ -63,3 +63,5 @@ if __name__ == "__main__":
     config = SimulationConfig(paths=64, maturity_days=21, seed=42)
     generate_and_save_batch(train_dir, market, config, batches=10, seeds=range(10))
     generate_and_save_batch(val_dir, market, config, batches=10, seeds=range(100, 110))  # different seeds
+
+    print(f"Generated scenarios in {scenario_dir}")

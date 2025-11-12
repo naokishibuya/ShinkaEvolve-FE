@@ -9,7 +9,7 @@ evo_config:
     - "ollama::codegemma:7b"
     - "ollama::codellama:7b"
   llm_dynamic_selection: ucb
-  embedding_model: "nomic-embed-text"
+  embedding_model: "ollama::nomic-embed-text"
   llm_kwargs:
     temperatures:
       - 0.0

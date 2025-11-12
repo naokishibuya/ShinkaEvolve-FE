@@ -1,21 +1,35 @@
 evaluate_function:
   _target_: examples.nikkei_hedger.evaluate.main
-  program_path: ${output_dir}/program.py
-  results_dir: ${output_dir}/eval
-  instances: ${instances}
-  budget: ${budget}
-  random_seeds: ${random_seeds}
+  program_path: ???
+  results_dir: ???
+  strike: 30000.0
+  maturity_days: 21
+  option_type: call
+  hedge_ratio: 1.0
+  rebalance_steps: 1
+  transaction_cost_bps: 5.0
+  scenario_dir: .scenarios/nikkei_day21
 
 distributed_job_config:
-  _target_: shinka.launch.LocalJobConfig
-  eval_program_path: "examples/nikkei_hedger/evaluate.py"
+  _target_: shinka.launch.SlurmCondaJobConfig
+  modules:
+  - "cuda/12.4"
+  - "cudnn/8.9.7"
+  - "hpcx/2.20"
+  eval_program_path: "shinka/eval_hydra.py"
+  conda_env: "shinka"
+  time: "01:00:00"
+  cpus: 16
+  gpus: 1
+  mem: "8G"
 
 evo_config:
   task_sys_msg: |
-    You are an expert in job shop scheduling. Build constructive or metaheuristic solvers for OR‑Library/Taillard JSSP instances. 
-    Always produce feasible schedules that respect job precedence and machine capacity (one operation at a time, no preemption), and minimize the makespan. 
-    Prefer concise, deterministic Python that solves up to ~20×20 instances within a few seconds (e.g., OR‑Tools CP‑SAT or a strong heuristic). 
-    Read OR‑Library format (n m, then per job: machine, duration pairs; accept 0‑ or 1‑based machines) and output start/end times per operation along with the makespan.
+    You are improving a Nikkei‑225 option hedging strategy. Only edit code between
+    `# EVOLVE-BLOCK-START` and `# EVOLVE-BLOCK-END`; everything else is off-limits.
+    Use the state dict (spot, vol, ttm, delta, cash, hedge_inventory, etc.) to decide
+    how much futures hedge to trade each step. Aim to reduce tail losses and trading
+    cost while maintaining stable hedges across Tokyo/SGX sessions.
   language: "python"
   init_program_path: "examples/nikkei_hedger/initial.py"
   job_type: "local"

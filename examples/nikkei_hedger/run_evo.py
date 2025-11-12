@@ -8,6 +8,14 @@ from shinka.database.dbase import DatabaseConfig
 from shinka.launch import LocalJobConfig
 
 
+TASK_SYS_MSG = (
+"""You are improving a Nikkei‑225 option hedging strategy. Only edit code between
+`# EVOLVE-BLOCK-START` and `# EVOLVE-BLOCK-END`; everything else is off-limits.
+Use the state dict (spot, vol, ttm, delta, cash, hedge_inventory, etc.) to decide
+how much futures hedge to trade each step. Aim to reduce tail losses and trading
+cost while maintaining stable hedges across Tokyo/SGX sessions.""")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run ShinkaEvolve on Nikkei hedging task")
     parser.add_argument("--results_dir", default="results/nikkei_hedger")
@@ -23,6 +31,7 @@ def main() -> None:
     args = parser.parse_args()
 
     evo_config = EvolutionConfig(
+        task_sys_msg=TASK_SYS_MSG,
         init_program_path="examples/nikkei_hedger/initial.py",
         results_dir=args.results_dir,
         patch_types=["diff", "full"],
@@ -43,7 +52,7 @@ def main() -> None:
     )
 
     db_config = DatabaseConfig(
-        db_path=str(Path(args.results_dir) / "evolution_db.sqlite"),
+        db_path="evolution_db.sqlite",
         num_islands=2,
         archive_size=40,
         elite_selection_ratio=0.3,
