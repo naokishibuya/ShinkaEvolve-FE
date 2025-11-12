@@ -1,8 +1,9 @@
 import os
 import openai
+import ollama
 import google.generativeai as genai
 import pandas as pd
-from typing import Union, List, Optional, Tuple
+from typing import Union, List, Optional, Tuple, Any
 import numpy as np
 import logging
 
@@ -37,8 +38,14 @@ GEMINI_EMBEDDING_COSTS = {
     "gemini-embedding-001": 0.0 / M,  # Check current pricing
 }
 
-def get_client_model(model_name: str) -> tuple[Union[openai.OpenAI, str], str]:
-    if model_name in OPENAI_EMBEDDING_MODELS:
+def get_client_model(model_name: str) -> tuple[Any, str]:
+    if model_name.startswith("ollama::"):
+        client = ollama.Client(
+            host=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            timeout=float(os.getenv("OLLAMA_TIMEOUT", "120")),
+        )
+        model_to_use = model_name
+    elif model_name in OPENAI_EMBEDDING_MODELS:
         client = openai.OpenAI()
         model_to_use = model_name
     elif model_name in AZURE_EMBEDDING_MODELS:
@@ -96,6 +103,19 @@ class EmbeddingClient:
             single_code = True
         else:
             single_code = False
+        # Handle Ollama models
+        if self.model_name.startswith("ollama::"):
+            embeddings = []
+            for text in code:
+                res = self.client.embeddings(
+                    model=self.model[8:],  # remove "ollama::" prefix
+                    prompt=text,
+                )
+                embeddings.append(res.get("embedding", []))
+            if single_code:
+                return (embeddings[0] if embeddings else []), 0.0
+            return embeddings, 0.0
+
         # Handle Gemini models
         if self.model_name in GEMINI_EMBEDDING_MODELS:
             try:

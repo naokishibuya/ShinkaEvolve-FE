@@ -1,0 +1,33 @@
+evo_config:
+  _target_: shinka.core.EvolutionConfig
+  num_generations: 5
+  max_parallel_jobs: 1
+  max_patch_attempts: 5
+
+  # LLM Configuration
+  llm_models:
+    - "ollama::codegemma:7b"
+    - "ollama::codellama:7b"
+  llm_dynamic_selection: ucb
+  embedding_model: "nomic-embed-text"
+  llm_kwargs:
+    temperatures:
+      - 0.0
+      - 0.5
+      - 1.0
+    max_tokens: 2048
+  meta_llm_models: null
+  novelty_llm_models: null
+
+  # Patch Configuration
+  patch_types:
+    - "diff"
+    - "full"
+    - "cross"
+  patch_type_probs:
+    - 0.4
+    - 0.4
+    - 0.2
+
+  # Task Configuration
+  results_dir: ${output_dir}

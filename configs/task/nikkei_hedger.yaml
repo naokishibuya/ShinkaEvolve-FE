@@ -1,0 +1,23 @@
+evaluate_function:
+  _target_: examples.nikkei_hedger.evaluate.main
+  program_path: ${output_dir}/program.py
+  results_dir: ${output_dir}/eval
+  instances: ${instances}
+  budget: ${budget}
+  random_seeds: ${random_seeds}
+
+distributed_job_config:
+  _target_: shinka.launch.LocalJobConfig
+  eval_program_path: "examples/nikkei_hedger/evaluate.py"
+
+evo_config:
+  task_sys_msg: |
+    You are an expert in job shop scheduling. Build constructive or metaheuristic solvers for OR‑Library/Taillard JSSP instances. 
+    Always produce feasible schedules that respect job precedence and machine capacity (one operation at a time, no preemption), and minimize the makespan. 
+    Prefer concise, deterministic Python that solves up to ~20×20 instances within a few seconds (e.g., OR‑Tools CP‑SAT or a strong heuristic). 
+    Read OR‑Library format (n m, then per job: machine, duration pairs; accept 0‑ or 1‑based machines) and output start/end times per operation along with the makespan.
+  language: "python"
+  init_program_path: "examples/nikkei_hedger/initial.py"
+  job_type: "local"
+
+exp_name: "shinka_nikkei_hedger"

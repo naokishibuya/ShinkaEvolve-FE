@@ -20,6 +20,7 @@ from .models import (
     query_openai,
     query_deepseek,
     query_gemini,
+    query_ollama,
     QueryResult,
 )
 import logging
@@ -196,7 +197,9 @@ def query(
     client, model_name = get_client_llm(
         model_name, structured_output=output_model is not None
     )
-    if model_name in CLAUDE_MODELS.keys() or "anthropic" in model_name:
+    if model_name.startswith("ollama::"):
+        query_fn = query_ollama
+    elif model_name in CLAUDE_MODELS.keys() or "anthropic" in model_name:
         query_fn = query_anthropic
     elif model_name in OPENAI_MODELS.keys():
         query_fn = query_openai
