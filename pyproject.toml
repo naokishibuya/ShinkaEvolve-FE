@@ -46,7 +46,8 @@ dependencies = [
     "markdown",
     "aiofiles",
     "google-generativeai",
-    "ollama>=0.3",
+    "ollama",
+    "ortools",
 ]
 
 [tool.setuptools]

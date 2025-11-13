@@ -6,6 +6,9 @@ evo_config:
 
   # LLM Configuration
   llm_models:
+    - "ollama::llama3.1:8b"
+    - "ollama::deepseek-coder:6.7b"
+    - "ollama::qwen2.5-coder:7b"
     - "ollama::codegemma:7b"
     - "ollama::codellama:7b"
   llm_dynamic_selection: ucb
@@ -16,7 +19,8 @@ evo_config:
       - 0.5
       - 1.0
     max_tokens: 2048
-  meta_llm_models: null
+  meta_llm_models:
+    - "ollama::llama3.1:8b"
   novelty_llm_models: null
 
   # Patch Configuration

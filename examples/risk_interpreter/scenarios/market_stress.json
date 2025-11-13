@@ -1,0 +1,21 @@
+{
+  "name": "Market Stress",
+  "description": "Sharp market decline with elevated volatility",
+  "context": {
+    "news": "Global risk-off sentiment. Nikkei down 5% in two days.",
+    "market_signals": {
+      "nikkei_level": 35000,
+      "yen_usd": 138
+    },
+    "regulations": {
+      "mof_derivative_limit": 0.10,
+      "allowed_instruments": ["puts", "collars", "futures"]
+    },
+    "portfolio": {
+      "value": 1000000000,
+      "nikkei_exposure_pct": 40,
+      "current_protection": 0.20
+    },
+    "risk_appetite": "conservative"
+  }
+}

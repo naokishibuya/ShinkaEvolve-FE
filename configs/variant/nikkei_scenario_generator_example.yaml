@@ -1,0 +1,8 @@
+defaults:
+  - override /database@_global_: island_small
+  - override /evolution@_global_: zero_budget
+  - override /task@_global_: nikkei_scenario_generator
+  - override /cluster@_global_: local
+  - _self_
+
+variant_suffix: "_example"

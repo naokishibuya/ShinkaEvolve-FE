@@ -1,0 +1,63 @@
+evaluate_function:
+  _target_: examples.risk_interpreter.evaluate.main
+  program_path: ???
+  results_dir: ???
+
+distributed_job_config:
+  _target_: shinka.launch.SlurmCondaJobConfig
+  modules:
+  - "cuda/12.4"
+  - "cudnn/8.9.7"
+  - "hpcx/2.20"
+  eval_program_path: "shinka/eval_hydra.py"
+  conda_env: "shinka"
+  time: "00:10:00" 
+  cpus: 1
+  gpus: 1
+  mem: "8G"
+
+evo_config:
+  language: python
+  init_program_path: "examples/risk_interpreter/initial.py"
+  job_type: local
+  task_sys_msg: |
+    You are evolving a risk interpretation strategy for financial institutions.
+
+    GOAL: Improve the interpret_context() function to better translate market context
+    into optimization parameters.
+
+    CURRENT PERFORMANCE is measured across 3 scenarios:
+    1. BOJ Policy Change - tests adaptation to regulatory shifts
+    2. Market Stress - tests protection during volatility
+    3. Calm Market - tests cost efficiency in stable conditions
+
+    KEY OBJECTIVES:
+    - Balance protection vs. cost appropriately for each scenario
+    - Satisfy constraints (cost limits, minimum protection)
+    - Maintain robust performance across different market conditions
+
+    WHAT TO FOCUS ON:
+    - Parse context signals (news keywords, market metrics, risk appetite)
+    - Adjust risk_weight and cost_weight based on context
+    - Select appropriate instruments for different scenarios
+    - Generate realistic constraint parameters
+
+    AVAILABLE UTILITIES:
+    - analyze_news(text): Extract sentiment and market signals from news text
+      Returns: {'sentiment': -1 to 1, 'volatility_signal': bool,
+                'policy_signal': bool, 'stress_level': 0 to 1}
+      Example: analyze_news(context['news'])
+
+    IMPORTANT: Only modify code inside EVOLVE-BLOCK markers.
+    Infrastructure code (problem formulation, solving, evaluation) is fixed.
+
+    Current metrics show:
+    - combined_score: Overall fitness (maximize this)
+    - avg_cost_pct: Average cost across scenarios
+    - avg_protection: Average protection level
+    - robustness: Consistency across scenarios (higher is better)
+
+    When you see feedback about "weak performance" in a scenario,
+    focus on adjusting how that scenario's context is interpreted.
+
+exp_name: risk_interpreter

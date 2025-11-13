@@ -1,0 +1,21 @@
+{
+  "name": "BOJ Policy Change",
+  "description": "Bank of Japan announces policy normalization, shifting away from unusual/emergency monetary policies back toward more normal conditions.",
+  "context": {
+    "news": "Bank of Japan signals end of negative interest rates. Markets expect increased volatility.",
+    "market_signals": {
+      "nikkei_level": 50000,
+      "yen_usd": 145
+    },
+    "regulations": {
+      "mof_derivative_limit": 0.10,
+      "allowed_instruments": ["puts", "collars", "futures"]
+    },
+    "portfolio": {
+      "value": 1000000000,
+      "nikkei_exposure_pct": 40,
+      "current_protection": 0.0
+    },
+    "risk_appetite": "conservative"
+  }
+}
