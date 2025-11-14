@@ -1,0 +1,75 @@
+[
+  {
+    "name": "Default Scenario",
+    "description": "Standard Japanese institutional portfolio with realistic crisis correlations",
+    "stats": {
+      "eq_vol": 0.012,
+      "vol_of_vol": 0.02,
+      "fx_vol": 0.006,
+      "ir_vol": 0.0005,
+      "corr_normal": [
+        [1.00, -0.30,  0.10, -0.20],
+        [-0.30, 1.00, -0.10,  0.05],
+        [0.10, -0.10,  1.00,  0.15],
+        [-0.20, 0.05,  0.15,  1.00]
+      ],
+      "corr_crisis": [
+        [1.00, -0.80, -0.40, -0.50],
+        [-0.80, 1.00,  0.30,  0.40],
+        [-0.40, 0.30,  1.00,  0.20],
+        [-0.50, 0.40,  0.20,  1.00]
+      ]
+    },
+    "portfolio": {
+      "base": {
+        "name": "Base_Nikkei_Long",
+        "instruments": [
+          {
+            "name": "Nikkei_Equity",
+            "mtm_value": 100000000000,
+            "eq_delta": 1.0,
+            "eq_gamma": 0.0,
+            "eq_vega": 0.0,
+            "fx_delta": 0.0,
+            "ir_dv01": 0.0
+          }
+        ]
+      },
+      "hedged": {
+        "name": "Hedged_Portfolio",
+        "instruments": [
+          {
+            "name": "Nikkei_Equity",
+            "mtm_value": 100000000000,
+            "eq_delta": 1.0
+          },
+          {
+            "name": "Short_Nikkei_Futures",
+            "mtm_value": -80000000000,
+            "eq_delta": 1.0
+          },
+          {
+            "name": "Long_Nikkei_Puts",
+            "mtm_value": 5000000000,
+            "eq_delta": -0.4,
+            "eq_gamma": 2.0,
+            "eq_vega": 3.0
+          },
+          {
+            "name": "Long_JGB_Futures",
+            "mtm_value": 0.0,
+            "ir_dv01": -300000000
+          },
+          {
+            "name": "Short_USDJPY_Futures",
+            "mtm_value": 50000000000,
+            "fx_delta": -1.0
+          }
+        ]
+      }
+    },
+    "config": {
+      "lambda_penalty": 1000000000
+    }
+  }
+]
