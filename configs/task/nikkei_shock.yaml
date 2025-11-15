@@ -1,0 +1,40 @@
+evaluate_function:
+  _target_: examples.nikkei_shock.evaluate.main
+  program_path: ???
+  results_dir: ???
+
+distributed_job_config:
+  _target_: shinka.launch.SlurmCondaJobConfig
+  modules:
+  - "cuda/12.4"
+  - "cudnn/8.9.7"
+  - "hpcx/2.20"
+  eval_program_path: "shinka/eval_hydra.py"
+  conda_env: "shinka"
+  time: "00:10:00" 
+  cpus: 1
+  gpus: 1
+  mem: "8G"
+
+evo_config:
+  language: python
+  init_program_path: "examples/nikkei_shock/initial.py"
+  job_type: local
+  use_text_feedback: true
+  task_sys_msg: |
+    You are designing realistic market stress scenarios to reveal weaknesses in
+    hedged portfolios. Propose coherent, plausible shocks that create meaningful
+    losses for the combined (exposure + hedge) portfolio.
+
+    Think like a risk manager. Use the portfolio’s exposures, hedge sensitivities,
+    and the stats provided to shape your choices for equity, volatility, FX, rates,
+    crisis intensity, and horizon. Avoid extreme or unrealistic sigma values.
+
+    Importantly: evolve a **rule-based algorithm**, not random values. Your
+    propose_scenario(...) should apply consistent, interpretable logic based on
+    the instruments and market context.
+
+    Modify only the EVOLVE-BLOCK and return a thoughtful, plausible, damaging
+    shock scenario.
+
+exp_name: nikkei_shock

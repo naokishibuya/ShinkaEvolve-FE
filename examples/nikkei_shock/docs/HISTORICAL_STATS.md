@@ -1,20 +1,18 @@
-# HistoricalStats Overview
+# Historical Stats Overview
 
-`HistoricalStats` contains all the **market statistics needed to turn a proposed scenario (in sigma units) into real shocks**.
+Historical stats dictionary contains all the **market statistics needed to turn a proposed scenario (in sigma units) into real shocks**.
 These values are computed **offline** from historical daily time series of Nikkei 225, VNKY (or ATM implied vol), USDJPY, and 10Y JGB yields.
 
-This dataclass is treated as **fixed input** to the scenario generator and does not change during evolution.
+These values are treated as **fixed input** to the scenario generator and does not change during evolution.
 
 ```python
-@dataclass
-class HistoricalStats:
-    eq_vol: float               # daily vol of NKY log returns
-    vol_of_vol: float           # daily vol of implied vol changes
-    fx_vol: float               # daily vol of USDJPY log returns
-    ir_vol: float               # daily vol of 10Y JGB yield changes
+eq_vol: float               # daily vol of NKY log returns
+vol_of_vol: float           # daily vol of implied vol changes
+fx_vol: float               # daily vol of USDJPY log returns
+ir_vol: float               # daily vol of 10Y JGB yield changes
 
-    corr_normal: np.ndarray     # 4x4 normal-regime correlation matrix
-    corr_crisis: np.ndarray     # 4x4 crisis-regime correlation matrix
+corr_normal: np.ndarray     # 4x4 normal-regime correlation matrix
+corr_crisis: np.ndarray     # 4x4 crisis-regime correlation matrix
 ```
 
 It is used to map sigma-level scenario proposals into **realistic, correlated multi-factor shocks**

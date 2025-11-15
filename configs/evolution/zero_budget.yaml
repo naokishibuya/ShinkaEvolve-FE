@@ -1,6 +1,6 @@
 evo_config:
   _target_: shinka.core.EvolutionConfig
-  num_generations: 20
+  num_generations: 300
   max_parallel_jobs: 1
   max_patch_attempts: 5
 

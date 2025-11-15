@@ -1,19 +1,17 @@
-# ScenarioParameters Overview
+# Scenario Parameters Overview
 
 This example evolves **stress scenarios** for a Nikkei-based portfolio hedging problem.
 A scenario is represented in *sigma space*, meaning each factor shock is expressed as a number of **standard deviations** ("sigmas") of that factor’s typical **daily change**.
 
-The `ScenarioParameters` dataclass is:
+The scenario dictionary contains the following parameters:
 
 ```python
-@dataclass
-class ScenarioParameters:
-    eq_sigmas: float
-    vol_sigmas: float
-    fx_sigmas: float
-    ir_sigmas: float
-    crisis_intensity: float
-    horizon_days: int
+eq_sigmas: float
+vol_sigmas: float
+fx_sigmas: float
+ir_sigmas: float
+crisis_intensity: float
+horizon_days: int
 ```
 
 Below is the meaning of each parameter.

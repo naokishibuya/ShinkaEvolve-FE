@@ -1,0 +1,269 @@
+# Scenario configurations for stress testing
+# Synthetic scenarios designed to test different hedge vulnerabilities
+
+# Common market statistics and config shared across all scenarios
+stats:
+  # Daily volatilities (1σ moves)
+  eq_vol: 0.012       # Nikkei 225 daily vol ~1.2% (annualized ~19%)
+  vol_of_vol: 0.02    # IV level daily vol ~2% (vol-of-vol)
+  fx_vol: 0.006       # USDJPY daily vol ~0.6% (annualized ~9.5%)
+  ir_vol: 0.0015      # JGB 10Y yield daily vol ~0.15% (15bp)
+
+  # Normal regime correlation matrix [eq, vol, fx, ir]
+  # Typical market: weak cross-asset correlations
+  corr_normal:
+    - [1.00, -0.30,  0.10, -0.20]  # EQ: slight neg corr with vol, slight pos with FX
+    - [-0.30, 1.00, -0.10,  0.05]  # VOL: inversely related to EQ in normal times
+    - [0.10, -0.10,  1.00,  0.15]  # FX: weak correlations
+    - [-0.20, 0.05,  0.15,  1.00]  # IR: weak correlations
+
+  # Crisis regime correlation matrix [eq, vol, fx, ir]
+  # Crisis: strong flight-to-safety, higher cross-asset comovement
+  corr_crisis:
+    - [1.00, -0.80, -0.40, -0.50]  # EQ crash → vol spike, JPY strength, yield drop
+    - [-0.80, 1.00,  0.30,  0.40]  # VOL spike strongly linked to EQ selloff and risk-off
+    - [-0.40, 0.30,  1.00,  0.20]  # FX: JPY tends to strengthen when EQ falls (USDJPY down)
+    - [-0.50, 0.40,  0.20,  1.00]  # IR: yields fall (flight to JGBs)
+
+config:
+  max_sigma_ratio: 10.0
+  max_horizon_days: 10
+  lambda_penalty: 0.1
+
+
+# Individual scenarios (zero parameters omitted for clarity)
+scenarios:
+  # Scenario 1: Baseline scenario with standard hedging strategy
+  - name: Default Scenario
+    description: Standard Japanese institutional portfolio with realistic crisis correlations
+    # Shock	                  Expected Behavior
+    # ----------------------- --------------------------------------------------------
+    # Rally	                  Puts bleed (theta + equity hedge cost) → mild losses
+    # Neutral	                Theta bleed + mild vol drift → small losses
+    # Crash	                  Good protection but not perfect (80% futures + finite convexity from puts)
+    # Vol spike               Strong profit from long vol exposure (via puts)
+    # Vol crush	              Losses from long vol exposure
+    # JPY strengthens	        FX hedge wins
+    # JPY weakens	            Largest weakness — FX hedge moves against the portfolio
+    # Correlation breakdown	  Puts help on EQ side, but FX bet can fail badly
+    #
+    # Strengths:
+    # - Reasonable equity hedge (80% linear EQ hedge via futures)
+    # - Convexity from puts → protection in crash
+    # - Short USDJPY futures → benefits from JPY strength
+    # - Some JGB DV01 → benefits from flight-to-safety yield drops
+    # Weakness:
+    # - FX-related risk when JPY weakens
+    # - Vol crush scenarios
+    exposure:
+      - name: Physical_Nikkei_Stocks
+        mtm_value: 100000000000   # ¥100B long equity holdings
+        eq_linear: 1.0            # Fully exposed to equity shock
+
+    hedge:
+      - name: Short_Nikkei_Futures
+        mtm_value: -80000000000   # ¥80B short futures (80% linear EQ hedge)
+        eq_linear: 1.0            # Linear hedge to equity shock
+
+      - name: Long_Nikkei_Puts
+        mtm_value: 5000000000     # ¥5B ATM puts (downside protection)
+        eq_linear: -0.35          # Linear equity exposure (approx -35% of notional)
+        eq_quad: 8.0              # Positive quadratic exposure (convex to equity shock)
+        vol_linear: 4.0           # Positive sensitivity to implied-vol shock
+
+      - name: Long_JGB_Futures
+        mtm_value: 0.0
+        ir_dv01: -5000000000      # -¥5B DV01: gains if yields fall, loses if yields rise
+
+      - name: Short_USDJPY_Futures
+        mtm_value: 50000000000    # ¥50B short USD/JPY (benefits from JPY strength)
+        fx_linear: -1.0           # Linear exposure: gains when USDJPY falls (JPY strengthens)
+
+
+  # Scenario 2: Minimal hedge - easy target for discovering basic failures
+  - name: Minimal Hedge
+    description: Weak hedge with only 40% equity coverage - vulnerability to simple crashes
+    # Shock	                  Expected Behavior
+    # ----------------------- --------------------------------------------------------
+    # Crash	                  Massive losses (AI should find this quickly)
+    # Rally	                  Strong profits (but less relevant for stress)
+    # Vol spike	              No protection: no explicit vol exposure
+    # Correlation breakdown	  No diversified hedges → major failures
+    # JPY strengthening	      Only weak FX hedge (via equity exporter effects) → equity loss dominates
+    #
+    # Strengths:
+    # - None except simplicity
+    # Weakness:
+    # - Very limited protection against downside or vol regimes
+    exposure:
+      - name: Physical_Nikkei_Stocks
+        mtm_value: 100000000000
+        eq_linear: 1.0            # Fully exposed to equity shock
+
+    hedge:
+      - name: Short_Nikkei_Futures
+        mtm_value: -40000000000   # Only 40% linear EQ hedge (weak)
+        eq_linear: 1.0
+
+
+  # Scenario 3: OTM put heavy - vulnerable to vol crush and theta decay
+  - name: OTM Put Heavy
+    description: Over-hedged with expensive deep OTM puts - vulnerable to vol crush
+    # Shock	                  Expected Behavior
+    # ----------------------- --------------------------------------------------------
+    # Rally	                  Large losses — strong equity hedge + costly convexity
+    # Neutral	                Slow, steady loss (theta decay on expensive OTM puts)
+    # Crash	                  Strong win (high convexity in deep downside)
+    # Vol spike	              Huge win (large long vol exposure)
+    # Vol crush	              Catastrophic loss (deep OTM puts collapse in value)
+    # JPY strengthens	        Helps FX hedge
+    # JPY weakens	            Hurt by large FX short
+    # Correlation breakdown	  Equity down + JPY weak → hedge can fail badly
+    #
+    # Strengths:
+    # - Massive convexity in big downside moves
+    # - Very protective in crises with vol spikes
+    # Weakness:
+    # - Vol crush
+    # - Yen-weak crisis scenarios
+    # - Slow-grind markets with vol drifting lower (theta burn)
+    exposure:
+      - name: Physical_Nikkei_Stocks
+        mtm_value: 100000000000
+        eq_linear: 1.0
+
+    hedge:
+      - name: Short_Nikkei_Futures
+        mtm_value: -100000000000   # 100% linear EQ hedge (over-hedged)
+        eq_linear: 1.0
+
+      - name: Long_OTM_Puts
+        mtm_value: 10000000000     # ¥10B deep OTM puts (expensive tail hedge)
+        eq_linear: -0.20           # Small linear equity exposure (far OTM)
+        eq_quad: 12.0              # Strong convexity to equity shock (large quadratic term)
+        vol_linear: 5.0            # High sensitivity to implied-vol shock (long vol)
+
+      - name: Short_USDJPY_Futures
+        mtm_value: 50000000000
+        fx_linear: -1.0            # Gains if JPY strengthens; loses if JPY weakens
+
+
+  # Scenario 4: FX-dependent hedge - vulnerable to correlation breakdown
+  - name: FX-Dependent Hedge
+    description: Heavy reliance on FX hedge - vulnerable when JPY weakens during crisis
+    # Shock	                  Expected Behavior
+    # ----------------------- --------------------------------------------------------
+    # Crash + JPY strengthens	Works reasonably: EQ hedge + FX hedge both help
+    # Crash + JPY weakens	    Massive loss (large FX short moves against portfolio)
+    # Vol spike	              Small benefit (modest long vol via puts)
+    # Vol crush	              Mild loss (low vol exposure)
+    # Correlation breakdown	  Most interesting: EQ down + JPY weak → hedge amplifies losses
+    # Rally	                  Loses on FX hedge (JPY tends to weaken)
+    # Neutral	                Mild bleed (hedge carry + small option cost)
+    #
+    # Strengths:
+    # - If crisis = JPY up → strong FX hedge
+    # - Moderate equity hedge
+    # - Some convexity via small put position
+    # - Some rate hedge
+    # Weakness:
+    # - Correlation inversion (equity down + yen weak)
+    # - FX-driven crises
+    exposure:
+      - name: Physical_Nikkei_Stocks
+        mtm_value: 100000000000
+        eq_linear: 1.0
+
+    hedge:
+      - name: Short_Nikkei_Futures
+        mtm_value: -60000000000   # 60% linear EQ hedge
+        eq_linear: 1.0
+
+      - name: Long_Nikkei_Puts
+        mtm_value: 2000000000     # Small put position (¥2B)
+        eq_linear: -0.30          # Linear equity exposure (partial downside hedge)
+        eq_quad: 6.0              # Positive convexity to equity shock
+        vol_linear: 3.0           # Long vol exposure (benefits from vol spike)
+
+      - name: Short_USDJPY_Futures
+        mtm_value: 100000000000   # ¥100B FX hedge (double the usual size)
+        fx_linear: -1.0           # Strong linear exposure to JPY strength
+
+      - name: Long_JGB_Futures
+        mtm_value: 0.0
+        ir_dv01: -3000000000      # Negative DV01: gains if yields fall (flight-to-safety)
+
+
+  # Scenario 5: Rates-heavy hedge - vulnerable to yield spike / BOJ-exit-type stress
+  - name: Rates-Heavy Hedge
+    description: Large JGB DV01 hedge that assumes yields fall in crises – vulnerable when yields spike instead
+    # Shock	                    Expected Behavior
+    # ------------------------- --------------------------------------------------------
+    # Crash + yields down        Works well: JGB hedge offsets equity loss (classic risk-off)
+    # Crash + yields up          Large loss: rate hedge moves the wrong way (inflation / BOJ-exit shock)
+    # Rate spike (mild EQ move)  Big loss from JGB DV01 even if equities are only slightly down
+    # Rate rally (yields down)   Strong gain from JGB hedge, especially in calm equity markets
+    # Vol spike                  Small benefit from limited long vol via puts
+    # Vol crush                  Mild loss or neutral (low vol exposure)
+    # Correlation breakdown      EQ down + yields up → hedge amplifies total losses
+    #
+    # Strengths:
+    # - Strong protection in classic flight-to-safety scenarios (equity down, yields down)
+    # - Some convexity via puts for deep crashes
+    # Weakness:
+    # - Very vulnerable to inflation / BOJ-exit-type stress (yields up in EQ selloff)
+    # - Sensitive to rate shocks even when equities are relatively calm
+    exposure:
+      - name: Physical_Nikkei_Stocks
+        mtm_value: 100000000000   # ¥100B long equity holdings
+        eq_linear: 1.0
+
+    hedge:
+      - name: Short_Nikkei_Futures
+        mtm_value: -60000000000   # 60% linear EQ hedge
+        eq_linear: 1.0
+
+      - name: Long_Nikkei_Puts
+        mtm_value: 2000000000     # ¥2B small put overlay
+        eq_linear: -0.30          # Partial equity downside hedge
+        eq_quad: 6.0              # Convexity to equity shock
+        vol_linear: 3.0           # Long vol exposure (benefits from vol spike)
+
+      - name: Long_JGB_Futures
+        mtm_value: 0.0
+        ir_dv01: -12000000000     # Large negative DV01: big gain if yields fall, big loss if yields rise
+
+
+  # Scenario 6: Short vol seller - vulnerable to vol spike and gap moves
+  - name: Short Vol Seller
+    description: Delta-hedged short-vol portfolio – profits in calm markets, vulnerable to vol spikes and large moves
+    # Shock	                    Expected Behavior
+    # ------------------------- --------------------------------------------------------
+    # Neutral / small moves      Strong profits from short convexity / short vol (earning risk premium)
+    # Vol crush                  Big profit as implied vol collapses
+    # Vol spike                  Huge loss: short vol exposure gets hit hard
+    # Crash (gap down)           Large loss: negative convexity + vol spike combined
+    # Sharp rally                Large loss: negative convexity in the other direction
+    # Correlation breakdown      EQ and vol both move against the position → worst outcomes
+    # JPY moves / rates          Minor impact (no explicit FX/IR hedges here)
+    #
+    # Strengths:
+    # - Very profitable in calm, range-bound, or vol-crush environments
+    # Weakness:
+    # - Extremely vulnerable to vol spikes, crashes, and large directional moves
+    exposure:
+      - name: Physical_Nikkei_Stocks
+        mtm_value: 100000000000   # ¥100B long equity holdings
+        eq_linear: 1.0
+
+    hedge:
+      - name: Short_Nikkei_Futures
+        mtm_value: -100000000000  # ~100% linear EQ hedge → roughly delta-neutral vs equity
+        eq_linear: 1.0
+
+      - name: Short_Vol_Position
+        mtm_value: 10000000000     # ¥10B short vol (straddle-like) position
+        eq_linear: 0.0             # Structurally set up to be roughly delta-neutral
+        eq_quad: -15.0             # Negative quadratic exposure (short convexity / gamma-like)
+        vol_linear: -10.0          # Negative sensitivity to implied-vol shock (short vol)
+        # No explicit FX or IR hedge here to isolate short-vol and equity convexity risk
