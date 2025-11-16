@@ -92,6 +92,7 @@ def generate_feedback(scenarios: list[dict], analyses: list[str], llm_judge: LLM
     public_feedback = [
         {
             "scenario_name": scenario["name"],
+            "user_msgs": user_msgs[i],
             "analysis": analyses[i],
             "judge_score": judge_scores[i],
             "judge_text": judge_texts[i],
@@ -101,7 +102,7 @@ def generate_feedback(scenarios: list[dict], analyses: list[str], llm_judge: LLM
 
     private_feedback = {
         "system_msg": SYSTEM_MSG,
-        "user_msgs": user_msgs
+        "scenarios": scenarios,
     }
 
     text_feedback = "\n\n".join(
