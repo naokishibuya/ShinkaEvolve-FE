@@ -1,6 +1,6 @@
 evo_config:
   _target_: shinka.core.EvolutionConfig
-  num_generations: 300
+  num_generations: 100
   max_parallel_jobs: 1
   max_patch_attempts: 5
 
@@ -18,7 +18,7 @@ evo_config:
       - 0.0
       - 0.5
       - 1.0
-    max_tokens: 2048
+    max_tokens: 4096
   meta_llm_models:
     - "ollama::llama3.1:8b"
   novelty_llm_models: null

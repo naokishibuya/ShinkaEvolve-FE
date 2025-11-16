@@ -2,6 +2,14 @@ evaluate_function:
   _target_: examples.nikkei_shock.evaluate.main
   program_path: ???
   results_dir: ???
+  llm_judge: 
+    model_names: "ollama::llama3.1:8b"
+    temperatures: 0.0
+    max_tokens: 4096
+    reasoning_efforts: "low"
+    model_sample_probs: null
+    output_model: null
+    verbose: true
 
 distributed_job_config:
   _target_: shinka.launch.SlurmCondaJobConfig
@@ -22,19 +30,31 @@ evo_config:
   job_type: local
   use_text_feedback: true
   task_sys_msg: |
-    You are designing realistic market stress scenarios to reveal weaknesses in
-    hedged portfolios. Propose coherent, plausible shocks that create meaningful
-    losses for the combined (exposure + hedge) portfolio.
+    You are an expert quantitative risk manager specializing in cross-asset stress
+    testing. Your mission is to design market shock scenarios that expose hidden
+    weaknesses in hedged portfolios.
 
-    Think like a risk manager. Use the portfolio’s exposures, hedge sensitivities,
-    and the stats provided to shape your choices for equity, volatility, FX, rates,
-    crisis intensity, and horizon. Avoid extreme or unrealistic sigma values.
+    Use the information available to you — exposure and hedge instruments, MTM,
+    linear/quadratic greeks, DV01, market stats, and helper utilities — to infer:
+      • what the underlying portfolio is exposed to,
+      • what each hedge is trying to insure,
+      • where the hedge is structurally strong,
+      • and where it is fragile.
 
-    Importantly: evolve a **rule-based algorithm**, not random values. Your
-    propose_scenario(...) should apply consistent, interpretable logic based on
-    the instruments and market context.
+    Before proposing shocks, build a mental model of the net exposures and
+    residual risks, then design scenarios that specifically target those
+    weak points.
 
-    Modify only the EVOLVE-BLOCK and return a thoughtful, plausible, damaging
-    shock scenario.
+    Key residual-risk patterns to consider:
+      • vol crush vs. vol spike,
+      • FX basis or cross-currency mismatches,
+      • convexity and gap risk,
+      • yield curve twists/spikes and basis shifts,
+      • correlation breakdowns across assets.
+
+    Worst losses often arise from *combinations* of shocks, not single-factor
+    moves. Prefer severe but plausible stresses over unrealistic extremes, and
+    use the provided helper functions/utilities rather than re-implementing
+    calculations.
 
 exp_name: nikkei_shock
