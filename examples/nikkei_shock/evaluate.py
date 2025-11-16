@@ -1,9 +1,9 @@
 import argparse
+import copy
 import os
 from typing import Any
 from scenario import load_scenarios
 from feedback import generate_feedback
-from shinka import llm
 from shinka.core import run_shinka_eval
 from shinka.llm import LLMClient
 
@@ -21,17 +21,15 @@ def main(
     num_runs = len(scenarios)
 
     def get_experiment_kwargs(run_idx: int) -> dict:
-        return {"scenario": scenarios[run_idx]}
+        return {"scenario": copy.deepcopy(scenarios[run_idx])}
 
-    def validate_fn(run_result: dict) -> tuple[bool, str]:
-        if run_result is None:
-            return False, "No run_result returned"
-        if "scenario" not in run_result:
-            return False, "Missing 'scenario' in run_result"
-        if "analysis" not in run_result:
-            return False, "Missing 'analysis' in run_result"
+    def validate_fn(analysis: Any) -> tuple[bool, str | None]:
+        if analysis is None:
+            return False, "The returned analysis is None"
+        if not isinstance(analysis, str):
+            return False, f"The returned analysis is not a string (got {type(analysis).__name__})"
         return True, None
-    
+
     if llm_judge is None:
         llm_judge = {
             "model_names": "ollama::llama3.1:8b",
@@ -43,19 +41,19 @@ def main(
 
     llm_judge = LLMClient(**llm_judge)
 
-    def aggregate_metrics_fn(all_run_results: list[dict]) -> dict:
-        return generate_feedback(all_run_results, llm_judge)
+    def aggregate_metrics_fn(analyses: list[str]) -> dict:
+        return generate_feedback(scenarios, analyses, llm_judge)
 
-    metrics, correct, err = run_shinka_eval(
+    metrics, correct, error = run_shinka_eval(
         program_path=program_path,
         results_dir=results_dir,
-        experiment_fn_name="run_experiment",
+        experiment_fn_name="analyze_hedge_weakness",
         num_runs=num_runs,
         get_experiment_kwargs=get_experiment_kwargs,
         validate_fn=validate_fn,
         aggregate_metrics_fn=aggregate_metrics_fn,
     )
-    return metrics, correct, err
+    return metrics, correct, error
 
 
 if __name__ == "__main__":

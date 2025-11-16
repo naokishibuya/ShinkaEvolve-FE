@@ -22,23 +22,14 @@ def load_scenarios(path: str | Path | None = None) -> list[dict[str, Any]]:
         exposure = normalize_instruments(s["exposure"])
         hedge = normalize_instruments(s["hedge"])
 
-        scenario = {
+        scenarios.append({
             "name": name,
             "description": desc,
             "exposure": exposure,
             "hedge": hedge,
             "stats": stats,
             "config": config,
-        }
-
-        scenario_yaml = yaml.safe_dump({
-            "stats": data["stats"],
-            "config": data["config"],
-            **s,
-        }, sort_keys=False)
-        scenario.update({"scenario_yaml": scenario_yaml})
-
-        scenarios.append(scenario)
+        })
     return scenarios
 
 
