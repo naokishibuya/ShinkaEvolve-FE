@@ -2,14 +2,7 @@ evaluate_function:
   _target_: examples.nikkei_shock.evaluate.main
   program_path: ???
   results_dir: ???
-  llm_judge: 
-    model_names: "ollama::llama3.1:8b"
-    temperatures: 0.0
-    max_tokens: 4096
-    reasoning_efforts: "low"
-    model_sample_probs: null
-    output_model: null
-    verbose: true
+  # Note: added llm_judge in variant yaml
 
 distributed_job_config:
   _target_: shinka.launch.SlurmCondaJobConfig
@@ -56,5 +49,177 @@ evo_config:
     moves. Prefer severe but plausible stresses over unrealistic extremes, and
     use the provided helper functions/utilities rather than re-implementing
     calculations.
+
+    ====================================================
+    FUNCTION CONTRACT: analyze_hedge_weakness
+    ====================================================
+
+    The Python function signature is:
+
+      def analyze_hedge_weakness(
+          name: str,
+          description: str,
+          exposure: list[dict[str, Any]],  # underlying portfolio instruments
+          hedge: list[dict[str, Any]],     # hedge overlay instruments
+          net_greeks: dict[str, float],    # MTM-weighted net greeks (delta, gamma, vega, FX, DV01)
+          stats: dict[str, Any],           # vols + two 4×4 corr matrices
+          config: dict[str, Any],          # shock bounds and penalties
+      ) -> dict[str, Any]
+
+    Instrument dict contains:
+      • name: str
+      • mtm_value: float   # Current mark-to-market value in JPY (positive = long, negative = short)
+      • eq_linear: float   # Equity delta per 1σ equity move, scaled by mtm_value
+      • eq_quad: float     # Equity gamma per σ² move, scaled by mtm_value
+      • vol_linear: float  # Vega per 1σ vol move, scaled by mtm_value
+      • fx_linear: float   # FX sensitivity per 1σ FX rate (e.g. USDJPY) move, scaled by mtm_value
+      • ir_dv01: float     # DV01 = JPY P&L per +1bp (0.0001 decimal) parallel rate move, absolute JPY amount
+
+    Net greeks dict contains:
+      • net_delta: float       # exp_delta + hdg_delta      (JPY / 1σ equity)
+      • net_gamma: float       # exp_gamma + hdg_gamma      (JPY / σ² equity)
+      • net_vega: float        # exp_vega  + hdg_vega       (JPY / 1σ vol)
+      • net_fx: float          # exp_fx    + hdg_fx         (JPY / 1σ FX)
+      • net_dv01: float        # exp_dv01 + hdg_dv01        (total DV01, JPY per +1bp move)
+
+      • exposure_delta: float  # equity delta from exposures only   (JPY / 1σ)
+      • exposure_gamma: float  # equity gamma from exposures only   (JPY / σ²)
+      • exposure_vega: float   # vega from exposures only           (JPY / 1σ vol)
+      • exposure_fx: float     # FX sensitivity from exposures only (JPY / 1σ FX)
+      • exposure_dv01: float   # DV01 from exposures only           (JPY per +1bp)
+
+      • hedge_delta: float     # equity delta from hedges only      (JPY / 1σ)
+      • hedge_gamma: float     # equity gamma from hedges only      (JPY / σ²)
+      • hedge_vega: float      # vega from hedges only              (JPY / 1σ vol)
+      • hedge_fx: float        # FX sensitivity from hedges only    (JPY / 1σ FX)
+      • hedge_dv01: float      # DV01 from hedges only              (JPY per +1bp)
+
+    Stats dict contains:
+      • eq_vol: float       # Daily equity volatility (1σ) as a decimal, e.g. 0.20 = 20%
+      • vol_of_vol: float   # Daily volatility-of-volatility (1σ) as a decimal
+      • fx_vol: float       # Daily FX volatility (1σ) as a decimal
+      • ir_vol: float       # Daily interest rate volatility (1σ) as a decimal (on yield in decimal units)
+      • corr_normal: 4×4    # Normal-regime correlation matrix: order [equity, vol, fx, ir]
+      • corr_crisis: 4×4    # Crisis-regime correlation matrix: order [equity, vol, fx, ir]
+
+    Config dict contains:
+      • max_sigma_ratio: float # e.g., 10.0 → ±10σ max shock (per factor)
+      • max_horizon_days: int  # Max horizon used for √T scaling
+
+    ============================
+    EXAMPLE CALL
+    ============================
+
+    This is an example of how your function will be called; you do NOT need to do this yourself.
+
+    ```python
+    analyze_hedge_weakness(
+      name="JPY Rate Hedge",
+      description="Portfolio of JPY bonds hedged with payer swaps.",
+      exposure=[
+          {
+              "name": "10yr JGB",
+              "mtm_value": 50_000_000,
+              "eq_linear": 0.0,
+              "eq_quad": 0.0,
+              "vol_linear": 0.0,
+              "fx_linear": 0.0,
+              # DV01: JPY P&L per +1bp (= 0.0001) parallel rate move
+              "ir_dv01": 600_000,   # +1bp → +600,000 JPY; +100bp (1%) → +60,000,000 JPY
+          },
+      ],
+      hedge=[
+          {
+              "name": "Short_Nikkei_Futures",
+              "mtm_value": -100_000_000_000,
+              "eq_linear": 1.0,
+          },
+          {
+              "name": "10yr Payer Swap",
+              "mtm_value": -30_000_000,
+              "eq_linear": 0.0,
+              "eq_quad": 0.0,
+              "vol_linear": 0.0,
+              "fx_linear": 0.0,
+              # Negative DV01: position loses if yields fall, gains if yields rise
+              "ir_dv01": -450_000,  # +1bp → -450,000 JPY; +100bp → -45,000,000 JPY
+          },
+      ],
+      net_greeks={
+          # Filled by the framework using exposure + hedge; you do not need to compute this here.
+      },
+      stats={
+          "eq_vol": 0.20,
+          "vol_of_vol": 0.15,
+          "fx_vol": 0.10,
+          "ir_vol": 0.05,
+          "corr_normal": np.array([
+              [1.0, -0.3,  0.1, -0.2],
+              [-0.3, 1.0, -0.1,  0.05],
+              [0.1, -0.1, 1.0,  0.15],
+              [-0.2, 0.05, 0.15, 1.0],
+          ]),
+          "corr_crisis": np.array([
+              [1.0, -0.5,  0.2, -0.3],
+              [-0.5, 1.0, -0.2,  0.1],
+              [0.2, -0.2, 1.0,  0.25],
+              [-0.3, 0.1,  0.25, 1.0],
+          ]),
+      },
+      config={
+          "max_sigma_ratio": 5.0,
+          "max_horizon_days": 10,
+      }
+    )
+    ```
+
+    ============================
+    RETURN REQUIREMENTS
+    ============================
+
+    The function MUST return a dict with the following structure:
+
+    ```python
+        dict[str, Any]: {
+            "analysis": str,
+            "shock_params": {
+                "eq_shock_sigma": float,   # equity shock in σ units (signed), e.g. -10.0 for -10σ equity
+                "vol_shock_sigma": float,  # volatility shock in σ units (signed), e.g. +10.0 for +10σ vol
+                "fx_shock_sigma": float,   # FX shock in σ units (signed), e.g. +8.0  for +8σ FX
+                "ir_shock_sigma": float,   # rate shock in σ units (signed), e.g. +5.0 for +5σ move on decimal yields
+                "horizon_days": int,       # shock duration (positive), e.g. 10
+                "crisis_intensity": float, # in [0.0, 1.0], 0=use corr_normal, 1=use corr_crisis
+                "rationale": {
+                    "equity": str,         # why the equity shock direction/magnitude was chosen
+                    "volatility": str,     # why the vol shock direction/magnitude was chosen
+                    "fx": str,             # FX rationale
+                    "rates": str,          # rates rationale (based on DV01 in JPY per 1bp)
+                    "correlation": str,    # why crisis_intensity was chosen
+                },
+            }
+        }
+    ```
+
+    The "analysis" field MUST be a clear multi-line string that describes:
+      • the portfolio’s true factor exposures (equity delta/gamma, vega, FX, rates),
+      • what each hedge instrument is intended to insure,
+      • structural or residual weaknesses (unhedged, over-hedged, regime risks),
+      • consistency with the given stats, correlations, and config.
+
+    The "shock_params" dict MUST contain worst-case crisis shock parameters that
+    maximize hedge backfire, subject to the plausibility constraints implied by
+    stats and config.
+
+    Each rationale entry should be a concise explanation (1–2 sentences).
+    If a rationale does not apply, set its value to None. The evaluator will treat
+    None as "N/A".
+
+    Rules for choosing worst-case shocks:
+      • Use eq_vol, vol_of_vol, fx_vol, ir_vol, max_sigma_ratio, and max_horizon_days
+        to keep shocks “severe but plausible”.
+      • Align directions with net exposures to maximize loss
+        (e.g. equity down for net long delta, vol spike for net short vega, etc.).
+      • Choose crisis_intensity to reflect how much you rely on crisis correlations
+        to generate joint tail losses (0.0 = normal, 1.0 = full crisis, 0.5 = mixed).
 
 exp_name: nikkei_shock

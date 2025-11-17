@@ -15,7 +15,7 @@ corr_normal: np.ndarray     # 4x4 normal-regime correlation matrix
 corr_crisis: np.ndarray     # 4x4 crisis-regime correlation matrix
 ```
 
-It is used to map sigma-level scenario proposals into **realistic, correlated multi-factor shocks**
+It is used to map sigma-level scenario proposals into **realistic, correlated multi-factor moves**
 
 ## What Each Field Means
 
@@ -23,17 +23,17 @@ It is used to map sigma-level scenario proposals into **realistic, correlated mu
 
 * Computed from **daily log returns** of Nikkei 225.
 * Represents the standard deviation of daily log-price movements: $\text{eq\_vol} = \text{std}(\ln P_t - \ln P_{t-1})$.
-* Converts `eq_sigmas` (number of standard deviations) into a real price shock over T days.
+* Converts `eq_sigmas` (number of standard deviations) into a real price move over T days.
 
 $$
-\text{eq\_shock} = \text{eq\_sigmas} \times \text{eq\_vol} \times \sqrt{T}
+\text{eq\_move} = \text{eq\_sigmas} \times \text{eq\_vol} \times \sqrt{T}
 $$
 
 **Example:** 
 
 If `eq_vol = 2%`, `eq_sigmas = -2`, and `T = 10` days:
 $$
-\text{eq\_shock} = -2 \times 0.02 \times \sqrt{10} \approx -12.6\%
+\text{eq\_move} = -2 \times 0.02 \times \sqrt{10} \approx -12.6\%
 $$
 
 ---
@@ -42,7 +42,7 @@ $$
 
 * Derived from **daily changes in implied vol** (e.g., VNKY or ATM IV).
 * Represents the standard deviation of daily IV movements (in percentage points or basis points).
-* Converts `vol_sigmas` (number of standard deviations) into a real IV shock over T days.
+* Converts `vol_sigmas` (number of standard deviations) into a real IV move over T days.
 
 $$
 \Delta \sigma = \text{vol\_sigmas} \times \text{vol\_of\_vol} \times \sqrt{T}
@@ -66,14 +66,14 @@ This reflects **volatility regime shifts**, which directly impact **vega PnL** f
 * Used to convert `fx_sigmas` into a realistic USDJPY move over T days.
 
 $$
-\text{fx\_shock} = \text{fx\_sigmas} \times \text{fx\_vol} \times \sqrt{T}
+\text{fx\_move} = \text{fx\_sigmas} \times \text{fx\_vol} \times \sqrt{T}
 $$
 
 **Example:**
 
 If `fx_vol = 0.8%`, `fx_sigmas = +2`, and `T = 10` days:
 $$
-\text{fx\_shock} = 2 \times 0.008 \times \sqrt{10} \approx +5.1\%
+\text{fx\_move} = 2 \times 0.008 \times \sqrt{10} \approx +5.1\%
 $$
 
 ---
@@ -82,20 +82,29 @@ $$
 
 * Computed from **daily yield changes** of 10Y JGB (in basis points or decimal form).
 * Represents the standard deviation of daily yield movements.
-* Used to convert `ir_sigmas` into a realistic yield shock over T days.
+* Used to convert `ir_sigmas` into a realistic yield move over T days.
 
 $$
-\text{ir\_shock} = \text{ir\_sigmas} \times \text{ir\_vol} \times \sqrt{T}
+\text{ir\_move} = \text{ir\_sigmas} \times \text{ir\_vol} \times \sqrt{T}
 $$
 
 **Example:**
 
-If `ir_vol = 3 bp` (0.0003), `ir_sigmas = +2`, and `T = 10` days:
+If `ir_vol = 3 bp` (0.0003 in decimals), `ir_sigmas = +2`, and `T = 10` days:
+
 $$
-\text{ir\_shock} = 2 \times 0.0003 \times \sqrt{10} \approx +1.9 \text{ bp}
+\text{ir\_move} = 2 \times 0.0003 \times \sqrt{10} \approx 0.00190
 $$
 
-**Note:** For bond portfolios, `ir_shock` translates to PnL via DV01 (see Scenario Parameters section).
+This corresponds to a **0.19% = 19 bp** move in yields.
+
+When translating to P&L:
+
+- `ir_move` is in **decimal yield**, e.g. `0.00190`.
+- DV01 is **JPY per 1bp**, so:  
+  $$
+  \text{PnL}_{rates} = \text{DV01} \times (\text{ir\_move} \times 10{,}000)
+  $$
 
 ---
 
@@ -143,7 +152,7 @@ Used when `crisis_intensity = 1`.
 
 ## How Correlation Regimes Work
 
-In `evaluate.py`, the scenario engine transforms independent sigma shocks into correlated multi-factor moves:
+In `evaluate.py`, the scenario engine transforms independent sigma moves into correlated multi-factor moves:
 
 1. **Interpolate (blend) correlations** based on `crisis_intensity`
 
@@ -169,12 +178,12 @@ In `evaluate.py`, the scenario engine transforms independent sigma shocks into c
 
     This produces a lower triangular matrix `L` such that $\text{cov} = L \, L^T$, encoding the full correlation structure.
 
-4. **Generate correlated shocks** by applying the Cholesky matrix to independent sigmas and scaling by horizon
+4. **Generate correlated moves** by applying the Cholesky matrix to independent sigmas and scaling by horizon
 
     $$
-    \text{correlated\_shocks} = L \cdot \sigma\_\text{vec} \times \sqrt{T}
+    \text{correlated\_moves} = L \cdot \sigma\_\text{vec} \times \sqrt{T}
     $$
 
     where $\sigma\_\text{vec} = [\text{eq\_sigmas}, \text{vol\_sigmas}, \text{fx\_sigmas}, \text{ir\_sigmas}]^T$.
 
-    The matrix-vector product `L @ σ_vec` transforms independent shocks into correlated ones respecting the interpolated regime.
+    The matrix-vector product `L @ σ_vec` transforms independent moves into correlated ones respecting the interpolated regime.

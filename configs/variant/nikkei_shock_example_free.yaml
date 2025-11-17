@@ -1,21 +1,16 @@
 defaults:
   - override /database@_global_: island_small
-  - override /evolution@_global_: small_budget
+  - override /evolution@_global_: zero_budget
   - override /task@_global_: nikkei_shock
   - override /cluster@_global_: local
   - _self_
 
 evaluate_function:
   llm_judge:
-    model_names: "gpt-4.1"
+    model_names: "ollama::llama3.1:8b"
     temperatures: 0.0
     max_tokens: 8196
     reasoning_efforts: "low"
     verbose: true
 
-evo_config:
-  num_generations: 10
-  llm_models:
-    - "gpt-4.1-mini"
-
-variant_suffix: "_example"
+variant_suffix: "_example_free"

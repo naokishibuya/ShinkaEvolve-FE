@@ -4,6 +4,7 @@ import os
 from typing import Any
 from scenario import load_scenarios
 from feedback import generate_feedback
+from utils import compute_net_greeks
 from shinka.core import run_shinka_eval
 from shinka.llm import LLMClient
 
@@ -17,18 +18,25 @@ def main(
     print(f"Saving results to: {results_dir}")
     os.makedirs(results_dir, exist_ok=True)
 
-    scenarios = load_scenarios()
+    scenarios, stats, config = load_scenarios()
     num_runs = len(scenarios)
 
     def get_experiment_kwargs(run_idx: int) -> dict:
-        return {"scenario": copy.deepcopy(scenarios[run_idx])}
-
-    def validate_fn(analysis: Any) -> tuple[bool, str | None]:
-        if analysis is None:
-            return False, "The returned analysis is None"
-        if not isinstance(analysis, str):
-            return False, f"The returned analysis is not a string (got {type(analysis).__name__})"
-        return True, None
+        scenario = copy.deepcopy(scenarios[run_idx])
+        name = scenario["name"]
+        description = scenario["description"]
+        exposure = scenario["exposure"]
+        hedge = scenario["hedge"]
+        net_greeks = compute_net_greeks(exposure, hedge)
+        return {
+            "name": name,
+            "description": description,
+            "exposure": exposure,
+            "hedge": hedge,
+            "net_greeks": net_greeks,
+            "stats": stats,
+            "config": config,
+        }
 
     if llm_judge is None:
         llm_judge = {
@@ -41,8 +49,12 @@ def main(
 
     llm_judge = LLMClient(**llm_judge)
 
-    def aggregate_metrics_fn(analyses: list[str]) -> dict:
-        return generate_feedback(scenarios, analyses, llm_judge)
+    def validate_fn(response: dict[str, Any]) -> tuple[bool, str | None]:
+        return validate_response(response, config)
+
+    def aggregate_metrics_fn(responses: list[dict[str, Any]]) -> dict:
+
+        return generate_feedback(scenarios, stats, config, responses, llm_judge)
 
     metrics, correct, error = run_shinka_eval(
         program_path=program_path,
@@ -54,6 +66,69 @@ def main(
         aggregate_metrics_fn=aggregate_metrics_fn,
     )
     return metrics, correct, error
+
+
+def validate_response(response: dict[str, Any], config: dict) -> tuple[bool, str | None]:
+    try:
+        _assert_response_value(response, "analysis", str)
+        shock_params = _assert_response_value(response, "shock_params", dict)
+
+        max_sigma_ratio = float(config["max_sigma_ratio"])
+        sigma_ratio_range = (-max_sigma_ratio, max_sigma_ratio)
+        _assert_response_value(shock_params, "eq_shock_sigma",  (float, int), sigma_ratio_range)
+        _assert_response_value(shock_params, "vol_shock_sigma", (float, int), sigma_ratio_range)
+        _assert_response_value(shock_params, "fx_shock_sigma",  (float, int), sigma_ratio_range)
+        _assert_response_value(shock_params, "ir_shock_sigma",  (float, int), sigma_ratio_range)
+
+        max_horizon_days = int(config["max_horizon_days"])
+        _assert_response_value(shock_params, "horizon_days", int, (1, max_horizon_days))
+        _assert_response_value(shock_params, "crisis_intensity", (float, int), (0.0, 1.0))
+
+        rationale = _assert_response_value(shock_params, "rationale", dict)
+
+        # Allow None or str for each rationale field, per spec
+        optional_str_type = (str, type(None))
+        _assert_response_value(rationale, "equity",      optional_str_type)
+        _assert_response_value(rationale, "volatility",  optional_str_type)
+        _assert_response_value(rationale, "fx",          optional_str_type)
+        _assert_response_value(rationale, "rates",       optional_str_type)
+        _assert_response_value(rationale, "correlation", optional_str_type)
+
+    except Exception as e:
+        print(f"Validation error: {e}")
+        return False, str(e)
+    return True, None
+
+
+def _assert_response_value(
+    container: dict[str, Any],
+    key: str,
+    expected_type: type | tuple[type, ...],
+    value_range: tuple[float | int, float | int] | None = None,
+) -> Any:
+    if key not in container:
+        raise KeyError(f"'{key}' is missing")
+    value = container[key]
+
+    # Type check
+    if not isinstance(value, expected_type):
+        if isinstance(expected_type, tuple):
+            expected_names = ", ".join(t.__name__ for t in expected_type)
+        else:
+            expected_names = expected_type.__name__
+        raise TypeError(
+            f"'{key}' is not of type(s) {expected_names} "
+            f"(got {type(value).__name__})"
+        )
+
+    # Optional range check (for numerics)
+    if value_range is not None:
+        low, high = value_range
+        if not (low <= value <= high):
+            raise ValueError(
+                f"'{key}' is out of range {value_range} (got {value})"
+            )
+    return value
 
 
 if __name__ == "__main__":

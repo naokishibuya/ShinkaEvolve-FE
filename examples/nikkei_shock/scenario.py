@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-def load_scenarios(path: str | Path | None = None) -> list[dict[str, Any]]:
+def load_scenarios(path: str | Path | None = None) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     """Load scenarios.yaml → ready-to-run scenario dicts."""
     path = Path(path or Path(__file__).parent / "scenarios.yaml")
     data = yaml.safe_load(path.read_text())
@@ -27,10 +27,8 @@ def load_scenarios(path: str | Path | None = None) -> list[dict[str, Any]]:
             "description": desc,
             "exposure": exposure,
             "hedge": hedge,
-            "stats": stats,
-            "config": config,
         })
-    return scenarios
+    return scenarios, stats, config
 
 
 def load_stats(stats_cfg: dict[str, Any]) -> dict[str, Any]:
@@ -50,7 +48,6 @@ def load_config(config_cfg: dict[str, Any]) -> dict[str, Any]:
     return {
         "max_sigma_ratio": float(config_cfg["max_sigma_ratio"]),
         "max_horizon_days": int(config_cfg["max_horizon_days"]),
-        "lambda_penalty": float(config_cfg["lambda_penalty"]),
     }
 
 
@@ -62,7 +59,7 @@ def normalize_instrument(inst: dict[str, Any]) -> dict[str, Any]:
     """Ensure all instrument fields exist and are numeric."""
     keys = ["name", "mtm_value", "eq_linear", "eq_quad",
             "vol_linear", "fx_linear", "ir_dv01"]
-    
+
     # assert fields are not something we don't expect
     for k in inst.keys():
         if k not in keys:

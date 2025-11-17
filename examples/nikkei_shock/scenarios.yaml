@@ -28,7 +28,6 @@ stats:
 config:
   max_sigma_ratio: 10.0
   max_horizon_days: 10
-  lambda_penalty: 0.1
 
 
 # Individual scenarios (zero parameters omitted for clarity)
@@ -51,33 +50,34 @@ scenarios:
     # - Reasonable equity hedge (80% linear EQ hedge via futures)
     # - Convexity from puts → protection in crash
     # - Short USDJPY futures → benefits from JPY strength
-    # - Some JGB DV01 → benefits from flight-to-safety yield drops
+    # - Some JGB DV01 → benefits from flight-to-safety yield drops 
+    #   (from riskier bond assets to JGB, so JGB goes up and other bonds goes down)
     # Weakness:
     # - FX-related risk when JPY weakens
     # - Vol crush scenarios
     exposure:
       - name: Physical_Nikkei_Stocks
-        mtm_value: 100000000000   # ¥100B long equity holdings
-        eq_linear: 1.0            # Fully exposed to equity shock
+        mtm_value: 100_000_000_000  # ¥100B long equity holdings
+        eq_linear: 1.0              # Fully exposed to equity shock
 
     hedge:
       - name: Short_Nikkei_Futures
-        mtm_value: -80000000000   # ¥80B short futures (80% linear EQ hedge)
-        eq_linear: 1.0            # Linear hedge to equity shock
+        mtm_value: -80_000_000_000  # ¥80B short futures (80% linear EQ hedge)
+        eq_linear: 1.0              # Linear hedge to equity shock
 
       - name: Long_Nikkei_Puts
-        mtm_value: 5000000000     # ¥5B ATM puts (downside protection)
-        eq_linear: -0.35          # Linear equity exposure (approx -35% of notional)
-        eq_quad: 8.0              # Positive quadratic exposure (convex to equity shock)
-        vol_linear: 4.0           # Positive sensitivity to implied-vol shock
+        mtm_value: 5_000_000_000    # ¥5B ATM puts (downside protection)
+        eq_linear: -0.35            # Linear equity exposure (approx -35% of notional)
+        eq_quad: 8.0                # Positive quadratic exposure (convex to equity shock)
+        vol_linear: 4.0             # Positive sensitivity to implied-vol shock
 
       - name: Long_JGB_Futures
         mtm_value: 0.0
-        ir_dv01: -5000000000      # -¥5B DV01: gains if yields fall, loses if yields rise
+        ir_dv01: -1_000_000_000     # -¥1B DV01 per 1bp: gains if yields fall, loses if yields rise
 
       - name: Short_USDJPY_Futures
-        mtm_value: 50000000000    # ¥50B short USD/JPY (benefits from JPY strength)
-        fx_linear: -1.0           # Linear exposure: gains when USDJPY falls (JPY strengthens)
+        mtm_value: 50_000_000_000   # ¥50B short USD/JPY (benefits from JPY strength)
+        fx_linear: -1.0             # Linear exposure: gains when USDJPY falls (JPY strengthens)
 
 
   # Scenario 2: Minimal hedge - easy target for discovering basic failures
@@ -97,12 +97,12 @@ scenarios:
     # - Very limited protection against downside or vol regimes
     exposure:
       - name: Physical_Nikkei_Stocks
-        mtm_value: 100000000000
-        eq_linear: 1.0            # Fully exposed to equity shock
+        mtm_value: 100_000_000_000
+        eq_linear: 1.0              # Fully exposed to equity shock
 
     hedge:
       - name: Short_Nikkei_Futures
-        mtm_value: -40000000000   # Only 40% linear EQ hedge (weak)
+        mtm_value: -40_000_000_000  # Only 40% linear EQ hedge (weak)
         eq_linear: 1.0
 
 
@@ -129,23 +129,23 @@ scenarios:
     # - Slow-grind markets with vol drifting lower (theta burn)
     exposure:
       - name: Physical_Nikkei_Stocks
-        mtm_value: 100000000000
+        mtm_value: 100_000_000_000
         eq_linear: 1.0
 
     hedge:
       - name: Short_Nikkei_Futures
-        mtm_value: -100000000000   # 100% linear EQ hedge (over-hedged)
+        mtm_value: -100_000_000_000  # 100% linear EQ hedge (over-hedged)
         eq_linear: 1.0
 
       - name: Long_OTM_Puts
-        mtm_value: 10000000000     # ¥10B deep OTM puts (expensive tail hedge)
-        eq_linear: -0.20           # Small linear equity exposure (far OTM)
-        eq_quad: 12.0              # Strong convexity to equity shock (large quadratic term)
-        vol_linear: 5.0            # High sensitivity to implied-vol shock (long vol)
+        mtm_value: 10_000_000_000    # ¥10B deep OTM puts (expensive tail hedge)
+        eq_linear: -0.20             # Small linear equity exposure (far OTM)
+        eq_quad: 12.0                # Strong convexity to equity shock (large quadratic term)
+        vol_linear: 5.0              # High sensitivity to implied-vol shock (long vol)
 
       - name: Short_USDJPY_Futures
-        mtm_value: 50000000000
-        fx_linear: -1.0            # Gains if JPY strengthens; loses if JPY weakens
+        mtm_value: 50_000_000_000
+        fx_linear: -1.0              # Gains if JPY strengthens; loses if JPY weakens
 
 
   # Scenario 4: FX-dependent hedge - vulnerable to correlation breakdown
@@ -171,27 +171,27 @@ scenarios:
     # - FX-driven crises
     exposure:
       - name: Physical_Nikkei_Stocks
-        mtm_value: 100000000000
+        mtm_value: 100_000_000_000
         eq_linear: 1.0
 
     hedge:
       - name: Short_Nikkei_Futures
-        mtm_value: -60000000000   # 60% linear EQ hedge
+        mtm_value: -60_000_000_000  # 60% linear EQ hedge
         eq_linear: 1.0
 
       - name: Long_Nikkei_Puts
-        mtm_value: 2000000000     # Small put position (¥2B)
-        eq_linear: -0.30          # Linear equity exposure (partial downside hedge)
-        eq_quad: 6.0              # Positive convexity to equity shock
-        vol_linear: 3.0           # Long vol exposure (benefits from vol spike)
+        mtm_value: 2_000_000_000    # Small put position (¥2B)
+        eq_linear: -0.30            # Linear equity exposure (partial downside hedge)
+        eq_quad: 6.0                # Positive convexity to equity shock
+        vol_linear: 3.0             # Long vol exposure (benefits from vol spike)
 
       - name: Short_USDJPY_Futures
-        mtm_value: 100000000000   # ¥100B FX hedge (double the usual size)
-        fx_linear: -1.0           # Strong linear exposure to JPY strength
+        mtm_value: 100_000_000_000  # ¥100B FX hedge (double the usual size)
+        fx_linear: -1.0             # Strong linear exposure to JPY strength
 
       - name: Long_JGB_Futures
         mtm_value: 0.0
-        ir_dv01: -3000000000      # Negative DV01: gains if yields fall (flight-to-safety)
+        ir_dv01: -30_000_000     # -¥30M DV01 per 1bp: gains if yields fall
 
 
   # Scenario 5: Rates-heavy hedge - vulnerable to yield spike / BOJ-exit-type stress
@@ -215,23 +215,23 @@ scenarios:
     # - Sensitive to rate shocks even when equities are relatively calm
     exposure:
       - name: Physical_Nikkei_Stocks
-        mtm_value: 100000000000   # ¥100B long equity holdings
+        mtm_value: 100_000_000_000  # ¥100B long equity holdings
         eq_linear: 1.0
 
     hedge:
       - name: Short_Nikkei_Futures
-        mtm_value: -60000000000   # 60% linear EQ hedge
+        mtm_value: -60_000_000_000  # 60% linear EQ hedge
         eq_linear: 1.0
 
       - name: Long_Nikkei_Puts
-        mtm_value: 2000000000     # ¥2B small put overlay
-        eq_linear: -0.30          # Partial equity downside hedge
-        eq_quad: 6.0              # Convexity to equity shock
-        vol_linear: 3.0           # Long vol exposure (benefits from vol spike)
+        mtm_value: 2_000_000_000    # ¥2B small put overlay
+        eq_linear: -0.30            # Partial equity downside hedge
+        eq_quad: 6.0                # Convexity to equity shock
+        vol_linear: 3.0             # Long vol exposure (benefits from vol spike)
 
       - name: Long_JGB_Futures
         mtm_value: 0.0
-        ir_dv01: -12000000000     # Large negative DV01: big gain if yields fall, big loss if yields rise
+        ir_dv01: -120_000_000    # -¥120M DV01 per 1bp: big gain if yields fall, big loss if yields rise
 
 
   # Scenario 6: Short vol seller - vulnerable to vol spike and gap moves
@@ -253,17 +253,17 @@ scenarios:
     # - Extremely vulnerable to vol spikes, crashes, and large directional moves
     exposure:
       - name: Physical_Nikkei_Stocks
-        mtm_value: 100000000000   # ¥100B long equity holdings
+        mtm_value: 100_000_000_000   # ¥100B long equity holdings
         eq_linear: 1.0
 
     hedge:
       - name: Short_Nikkei_Futures
-        mtm_value: -100000000000  # ~100% linear EQ hedge → roughly delta-neutral vs equity
+        mtm_value: -100_000_000_000  # ~100% linear EQ hedge → roughly delta-neutral vs equity
         eq_linear: 1.0
 
       - name: Short_Vol_Position
-        mtm_value: 10000000000     # ¥10B short vol (straddle-like) position
-        eq_linear: 0.0             # Structurally set up to be roughly delta-neutral
-        eq_quad: -15.0             # Negative quadratic exposure (short convexity / gamma-like)
-        vol_linear: -10.0          # Negative sensitivity to implied-vol shock (short vol)
+        mtm_value: 10_000_000_000    # ¥10B short vol (straddle-like) position
+        eq_linear: 0.0               # Structurally set up to be roughly delta-neutral
+        eq_quad: -15.0               # Negative quadratic exposure (short convexity / gamma-like)
+        vol_linear: -10.0            # Negative sensitivity to implied-vol shock (short vol)
         # No explicit FX or IR hedge here to isolate short-vol and equity convexity risk
