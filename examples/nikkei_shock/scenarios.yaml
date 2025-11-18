@@ -9,14 +9,6 @@ stats:
   fx_vol: 0.006       # USDJPY daily vol ~0.6% (annualized ~9.5%)
   ir_vol: 0.0015      # JGB 10Y yield daily vol ~0.15% (15bp)
 
-  # Normal regime correlation matrix [eq, vol, fx, ir]
-  # Typical market: weak cross-asset correlations
-  corr_normal:
-    - [1.00, -0.30,  0.10, -0.20]  # EQ: slight neg corr with vol, slight pos with FX
-    - [-0.30, 1.00, -0.10,  0.05]  # VOL: inversely related to EQ in normal times
-    - [0.10, -0.10,  1.00,  0.15]  # FX: weak correlations
-    - [-0.20, 0.05,  0.15,  1.00]  # IR: weak correlations
-
   # Crisis regime correlation matrix [eq, vol, fx, ir]
   # Crisis: strong flight-to-safety, higher cross-asset comovement
   corr_crisis:
@@ -24,10 +16,7 @@ stats:
     - [-0.80, 1.00,  0.30,  0.40]  # VOL spike strongly linked to EQ selloff and risk-off
     - [-0.40, 0.30,  1.00,  0.20]  # FX: JPY tends to strengthen when EQ falls (USDJPY down)
     - [-0.50, 0.40,  0.20,  1.00]  # IR: yields fall (flight to JGBs)
-
-config:
-  max_sigma_ratio: 10.0
-  max_horizon_days: 10
+  horizon_days: 10       # 10 days
 
 
 # Individual scenarios (zero parameters omitted for clarity)

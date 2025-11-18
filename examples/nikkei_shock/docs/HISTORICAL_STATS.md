@@ -1,189 +1,171 @@
 # Historical Stats Overview
 
-Historical stats dictionary contains all the **market statistics needed to turn a proposed scenario (in sigma units) into real shocks**.
-These values are computed **offline** from historical daily time series of Nikkei 225, VNKY (or ATM implied vol), USDJPY, and 10Y JGB yields.
-
-These values are treated as **fixed input** to the scenario generator and does not change during evolution.
+Historical stats provide all **market parameters needed to convert sigma-based
+shocks into real factor moves** over a multi-day horizon. These values are fixed
+inputs to the scenario generator and **do not change during evolution**.
 
 ```python
-eq_vol: float               # daily vol of NKY log returns
-vol_of_vol: float           # daily vol of implied vol changes
+eq_vol: float               # daily vol of Nikkei 225 log returns
+vol_of_vol: float           # daily vol of implied-volatility (ATM IV) changes
 fx_vol: float               # daily vol of USDJPY log returns
 ir_vol: float               # daily vol of 10Y JGB yield changes
+corr_crisis: np.ndarray     # 4×4 crisis-regime correlation matrix
+horizon_days: int           # scenario time horizon (days)
+````
 
-corr_normal: np.ndarray     # 4x4 normal-regime correlation matrix
-corr_crisis: np.ndarray     # 4x4 crisis-regime correlation matrix
+The scenario generator uses these fields to:
+
+1. Convert sigma shocks into **actual factor moves** (eq, vol, fx, rates).
+2. Evaluate **joint sigma plausibility** using the *Mahalanobis radius* based on the crisis correlation matrix.
+
+---
+
+## 1. eq_vol — Daily volatility of Nikkei log returns
+
+Derived from historical daily log returns:
+
+$$
+\text{eq\_vol} = \operatorname{std}(\ln P_t - \ln P_{t-1})
+$$
+
+Convert an equity shock in sigma units to a real equity move:
+
+$$
+\text{eq\_move} = \text{eq\_shock\_sigma} \times \text{eq\_vol} \times \sqrt{T}
+$$
+
+Example:
+If `eq_vol = 0.012`, `eq_shock_sigma = -3`, and `T = 10` days:
+
+$$
+\text{eq\_move} \approx -3 \cdot 0.012 \cdot \sqrt{10} \approx -11.4%
+$$
+
+---
+
+## 2. vol_of_vol — Daily volatility of implied-vol changes
+
+Represents the standard deviation of **daily changes in implied volatility** (e.g., VNKY ATM IV).
+
+$$
+\Delta \sigma = \text{vol\_shock\_sigma} \times \text{vol\_of\_vol} \times \sqrt{T}
+$$
+
+Used to compute **vega and convexity PnL**.
+
+---
+
+## 3. fx_vol — Daily volatility of USDJPY log returns
+
+Computed from daily log-return series of USDJPY.
+
+$$
+\text{fx\_move} = \text{fx\_shock\_sigma} \times \text{fx\_vol} \times \sqrt{T}
+$$
+
+If `fx_vol = 0.006` and `fx_shock_sigma = +5`:
+
+$$
+\text{fx\_move} \approx 5 \cdot 0.006 \cdot \sqrt{10} \approx +9.5%
+$$
+
+---
+
+## 4. ir_vol — Daily volatility of 10Y JGB yield changes
+
+Based on daily changes in **10Y JGB yields**, expressed in decimal form.
+
+$$
+\text{ir\_move} = \text{ir\_shock\_sigma} \times \text{ir\_vol} \times \sqrt{T}
+$$
+
+Example:
+If `ir_vol = 0.0015` and `ir_shock_sigma = +4`:
+
+$$
+\text{ir\_move} \approx 4 \cdot 0.0015 \cdot \sqrt{10} = 0.01895
+$$
+
+This means yields rise by **1.895% = 189.5 bp**.
+
+PNL linkage:
+
+$$
+\text{PnL}_\text{rates} = \text{DV01} \times (10{,}000 \cdot \text{ir\_move})
+$$
+
+---
+
+## 5. corr_crisis — Crisis-regime correlation matrix (4×4)
+
+The matrix encodes the **cross-asset correlation structure during market stress**.
+
+Order:
+`[equity, implied vol, FX (USDJPY), rates (10Y JGB)]`
+
+Example layout:
+
+```
+         EQ      VOL     FX      IR
+EQ      1.0     -0.8   -0.4    -0.5
+VOL    -0.8      1.0    0.3     0.4
+FX     -0.4      0.3    1.0     0.2
+IR     -0.5      0.4    0.2     1.0
 ```
 
-It is used to map sigma-level scenario proposals into **realistic, correlated multi-factor moves**
+### How correlations are used
 
-## What Each Field Means
+**Important change:**
 
-### **1. eq_vol — Daily volatility of Nikkei log returns**
+* We **do NOT mix directions** using correlations.
+* Factor moves (eq/vol/fx/ir) remain **independent**, based solely on the chosen sigma values.
+* The correlation matrix is used **only** to compute:
 
-* Computed from **daily log returns** of Nikkei 225.
-* Represents the standard deviation of daily log-price movements: $\text{eq\_vol} = \text{std}(\ln P_t - \ln P_{t-1})$.
-* Converts `eq_sigmas` (number of standard deviations) into a real price move over T days.
+### **joint_sigma (Mahalanobis radius)**
 
 $$
-\text{eq\_move} = \text{eq\_sigmas} \times \text{eq\_vol} \times \sqrt{T}
+\text{joint\_sigma}
+= \sqrt{
+\sigma^\top ,
+\text{corr\_crisis}^{-1} ,
+\sigma
+}
 $$
 
-**Example:** 
+where:
 
-If `eq_vol = 2%`, `eq_sigmas = -2`, and `T = 10` days:
 $$
-\text{eq\_move} = -2 \times 0.02 \times \sqrt{10} \approx -12.6\%
+\sigma =
+\begin{bmatrix}
+\text{eq\_shock\_sigma} \\
+\text{vol\_shock\_sigma} \\
+\text{fx\_shock\_sigma} \\
+\text{ir\_shock\_sigma}
+\end{bmatrix}
 $$
+
+### Purpose:
+
+* Plausibility constraint
+* Penalizes “unrealistic” shock combinations
+* Prevents the model from selecting impossible cross-asset configurations
+
+### NOT used for:
+
+* Direction mixing
+* Generating correlated factor moves
+* Affecting individual equity/vol/FX/rates shocks
+
+This keeps the model simple and interpretable.
 
 ---
 
-### **2. vol_of_vol — Daily volatility of implied-volatility changes**
+## 6. horizon_days — Scenario horizon in days
 
-* Derived from **daily changes in implied vol** (e.g., VNKY or ATM IV).
-* Represents the standard deviation of daily IV movements (in percentage points or basis points).
-* Converts `vol_sigmas` (number of standard deviations) into a real IV move over T days.
+Used universally for √T scaling:
 
 $$
-\Delta \sigma = \text{vol\_sigmas} \times \text{vol\_of\_vol} \times \sqrt{T}
+\text{scale} = \sqrt{T} = \sqrt{\text{horizon\_days}}
 $$
 
-**Example:**
-
-If `vol_of_vol = 1.5%`, `vol_sigmas = +3`, and `T = 10` days:
-$$
-\Delta \sigma = 3 \times 0.015 \times \sqrt{10} \approx +1.42\%
-$$
-
-This reflects **volatility regime shifts**, which directly impact **vega PnL** for option portfolios.
-
----
-
-### **3. fx_vol — Daily volatility of USDJPY log returns**
-
-* Computed from **daily log returns** of USDJPY.
-* Represents the standard deviation of daily FX movements.
-* Used to convert `fx_sigmas` into a realistic USDJPY move over T days.
-
-$$
-\text{fx\_move} = \text{fx\_sigmas} \times \text{fx\_vol} \times \sqrt{T}
-$$
-
-**Example:**
-
-If `fx_vol = 0.8%`, `fx_sigmas = +2`, and `T = 10` days:
-$$
-\text{fx\_move} = 2 \times 0.008 \times \sqrt{10} \approx +5.1\%
-$$
-
----
-
-### **4. ir_vol — Daily volatility of 10Y JGB yield changes**
-
-* Computed from **daily yield changes** of 10Y JGB (in basis points or decimal form).
-* Represents the standard deviation of daily yield movements.
-* Used to convert `ir_sigmas` into a realistic yield move over T days.
-
-$$
-\text{ir\_move} = \text{ir\_sigmas} \times \text{ir\_vol} \times \sqrt{T}
-$$
-
-**Example:**
-
-If `ir_vol = 3 bp` (0.0003 in decimals), `ir_sigmas = +2`, and `T = 10` days:
-
-$$
-\text{ir\_move} = 2 \times 0.0003 \times \sqrt{10} \approx 0.00190
-$$
-
-This corresponds to a **0.19% = 19 bp** move in yields.
-
-When translating to P&L:
-
-- `ir_move` is in **decimal yield**, e.g. `0.00190`.
-- DV01 is **JPY per 1bp**, so:  
-  $$
-  \text{PnL}_{rates} = \text{DV01} \times (\text{ir\_move} \times 10{,}000)
-  $$
-
----
-
-### **5. corr_normal — Normal-regime correlation matrix (4×4)**
-
-Correlation structure between the four risk factors in calm markets.
-
-The 4×4 matrix captures all pairwise correlations:
-* **Equity:** Daily log-returns of Nikkei 225
-* **Vol:** Daily changes in implied volatility (VNKY or ATM IV)
-* **FX:** Daily log-returns of USDJPY
-* **Rates:** Daily yield changes of 10Y JGB
-
-**Example structure:**
-```
-         Equity  Vol    FX     Rates
-Equity    1.0   -0.3   0.1    0.2
-Vol      -0.3    1.0  -0.1   -0.2
-FX        0.1   -0.1    1.0    0.3
-Rates     0.2   -0.2    0.3    1.0
-```
-
-Used when `crisis_intensity = 0`.
-
----
-
-### **6. corr_crisis — Crisis-regime correlation matrix (4×4)**
-
-Correlation structure between the four risk factors during stress periods (e.g., 2008, 2011, 2020).
-
-In crises, correlations typically strengthen and shift compared to normal regimes. Assets tend to move together in risk-off mode.
-
-**Example crisis-regime correlation matrix:**
-```
-         Equity  Vol    FX     Rates
-Equity    1.0   -0.7  -0.6    0.3
-Vol      -0.7    1.0   0.5   -0.4
-FX       -0.6    0.5    1.0   -0.2
-Rates     0.3   -0.4   -0.2    1.0
-```
-
-Used when `crisis_intensity = 1`.
-
----
-
-## How Correlation Regimes Work
-
-In `evaluate.py`, the scenario engine transforms independent sigma moves into correlated multi-factor moves:
-
-1. **Interpolate (blend) correlations** based on `crisis_intensity`
-
-    $$
-    \text{corr}(c) = (1 - c)\cdot\text{corr\_normal} + c\cdot\text{corr\_crisis}
-    $$
-
-    where $c = \text{crisis\_intensity}$. This enables smooth transition between normal, partial stress, and full crisis regimes.
-
-2. **Build covariance matrix** by scaling correlations with volatilities
-
-    $$
-    \text{cov} = D \cdot \text{corr}(c) \cdot D
-    $$
-
-    with $D = \text{diag}(\text{eq\_vol}, \text{vol\_of\_vol}, \text{fx\_vol}, \text{ir\_vol})$.
-
-3. **Factorize via Cholesky decomposition**
-
-    $$
-    L = \text{Cholesky}(\text{cov})
-    $$
-
-    This produces a lower triangular matrix `L` such that $\text{cov} = L \, L^T$, encoding the full correlation structure.
-
-4. **Generate correlated moves** by applying the Cholesky matrix to independent sigmas and scaling by horizon
-
-    $$
-    \text{correlated\_moves} = L \cdot \sigma\_\text{vec} \times \sqrt{T}
-    $$
-
-    where $\sigma\_\text{vec} = [\text{eq\_sigmas}, \text{vol\_sigmas}, \text{fx\_sigmas}, \text{ir\_sigmas}]^T$.
-
-    The matrix-vector product `L @ σ_vec` transforms independent moves into correlated ones respecting the interpolated regime.
+This applies to **all four factors**.
