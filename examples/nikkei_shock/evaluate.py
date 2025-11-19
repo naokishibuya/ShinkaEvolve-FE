@@ -16,7 +16,7 @@ def main(
     print(f"Saving results to: {results_dir}")
     os.makedirs(results_dir, exist_ok=True)
 
-    scenarios, stats = load_scenarios()
+    scenarios, stats, config = load_scenarios()
     num_runs = len(scenarios)
 
     def get_experiment_kwargs(run_idx: int) -> dict:
@@ -46,7 +46,7 @@ def main(
         return True, None
 
     def aggregate_metrics_fn(responses: list[ScenarioResponse]) -> dict:
-        return generate_feedback(scenarios, stats, responses, llm_judge)
+        return generate_feedback(scenarios, stats, config, responses, llm_judge)
 
     metrics, correct, error = run_shinka_eval(
         program_path=program_path,

@@ -19,6 +19,12 @@ stats:
   horizon_days: 10       # 10 days
 
 
+# for quantitative scoring
+config:
+   target_loss_ratio: 0.25  # what is considered to be severe loss
+   target_joint_sigma: 3.0  # crisis-like overall shock severity
+
+
 # Individual scenarios (zero parameters omitted for clarity)
 scenarios:
   # Scenario 1: Baseline scenario with standard hedging strategy

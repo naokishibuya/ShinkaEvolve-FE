@@ -45,7 +45,7 @@ class Scenario:
     description: str
     exposure: list[Instrument]
     hedge: list[Instrument]
-    net_greeks: GreeksBreakdown
+    greeks_breakdown: GreeksBreakdown
 
 
 @dataclass
@@ -84,6 +84,13 @@ class ScenarioResponse:
     shock_params: ShockParams
 
 
+# This is not exposed to the AI coder
+@dataclass
+class ScenarioConfig:
+    target_loss_ratio: float   # e.g. 0.5 for 50% loss vs exposure
+    target_joint_sigma: float  # e.g. 3.0 for crisis-like overall shock
+
+
 def load_scenarios(path: str | Path | None = None):
     path = Path(path or Path(__file__).parent / "scenarios.yaml")
     data = yaml.safe_load(path.read_text())
@@ -101,11 +108,13 @@ def load_scenarios(path: str | Path | None = None):
                 description=s["description"],
                 exposure=exposure,
                 hedge=hedge,
-                net_greeks=net_greeks,
+                greeks_breakdown=net_greeks,
             )
         )
 
-    return scenarios, stats
+    config = load_config(data["config"])
+
+    return scenarios, stats, config
 
 
 def load_stats(cfg):
@@ -116,6 +125,17 @@ def load_stats(cfg):
         ir_vol=float(cfg["ir_vol"]),
         corr_crisis=np.array(cfg["corr_crisis"], float),
         horizon_days=int(cfg["horizon_days"]),
+    )
+
+
+def load_config(cfg) -> ScenarioConfig:
+    target_loss_ratio = float(cfg["target_loss_ratio"])
+    target_joint_sigma = float(cfg["target_joint_sigma"])
+    assert target_loss_ratio > 0.0, "target_loss_ratio must be positive"
+    assert target_joint_sigma > 0.0, "target_joint_sigma must be positive"
+    return ScenarioConfig(
+        target_loss_ratio=target_loss_ratio,
+        target_joint_sigma=target_joint_sigma,
     )
 
 
