@@ -2,7 +2,7 @@ import numpy as np
 import re
 from dataclasses import is_dataclass, asdict
 from typing import Any
-from scenario import Scenario, RiskStats, ScenarioConfig, ShockParams, ScenarioResponse
+from scenario import Scenario, RiskStats, SearchConds, ShockParams, ScenarioResponse
 from quant_utils import (
     FactorMoves, PnLBreakdown, ScenarioMetrics, 
     calculate_factor_moves, calculate_portfolio_pnl, evaluate_scenario_metrics
@@ -12,21 +12,23 @@ from shinka.llm import LLMClient
 
 SYSTEM_MSG = """
 You are an expert cross-asset risk manager. Your task is to evaluate how well
-the ANALYSIS explains the portfolio's risk and the impact of the proposed shock.
+the ANALYSIS explains the portfolio's risk profile and the impact of the proposed
+shock parameters.
 
 Focus on whether the analysis:
 
 1) Correctly identifies the main net exposures (delta, gamma, vega, FX, DV01)
-   and what each hedge instrument is intended to protect.
+   and clearly explains what each hedge instrument is intended to protect.
 
-2) Clearly identifies structural weaknesses, residual risks, and realistic
-   hedge failure modes under the given SHOCK PARAMS and FACTOR MOVES.
+2) Clearly identifies structural weaknesses, residual risks, and realistic hedge
+   failure modes given the proposed SHOCK PARAMS and the resulting FACTOR MOVES.
 
-3) Is consistent with the data: instrument sensitivities, vols, crisis
-   correlations, the shock parameters, the resulting factor moves, and the
-   actual P&L under these moves.
+3) Is consistent with all provided data: instrument sensitivities, Greeks,
+   daily vols, crisis correlations, shock parameters, factor moves, and the
+   resulting P&L. The analysis does not need to compute exact numbers, but its
+   reasoning must not contradict them.
 
-4) Shows real insight into cross-asset interactions and crisis behavior
+4) Shows meaningful insight into cross-asset interactions and crisis behavior
    (not just generic statements).
 
 5) Is technically accurate, uses appropriate terminology, and is clear,
@@ -38,34 +40,37 @@ FIELD INTERPRETATION GUIDE (IMPORTANT):
 - Each scenario lists exposure and hedge instruments.
 - scenario.greeks_breakdown: contains net, exposure, and hedge Greeks (delta, gamma, vega, fx, dv01).
 - mtm_value: current mark-to-market in JPY (positive = long, negative = short).
+
 - eq_linear: equity delta-like sensitivity per 1σ equity move, scaled by mtm_value.
-- eq_quad: equity convexity (gamma-like) per (1σ move)^2, scaled by mtm_value.
-- vol_linear: volatility sensitivity (vega-like) per 1σ vol move, scaled by mtm_value.
-- fx_linear: FX sensitivity per 1σ move in FX (e.g. USDJPY), scaled by mtm_value.
+- eq_quad: equity convexity (gamma-like) sensitivity per (1σ move)^2, scaled by mtm_value.
+- vol_linear: implied-volatility sensitivity (vega-like) per 1σ vol move, scaled by mtm_value.
+- fx_linear: FX sensitivity per 1σ move in the FX rate (e.g., USDJPY), scaled by mtm_value.
 - ir_dv01: interest-rate DV01 in JPY (P&L per +1bp parallel rate move).
-- shock_params.rationale: contains textual justifications for each factor shock direction.
+
+- shock_params.rationale: textual justifications for each factor shock direction and magnitude.
 - stats.eq_vol / fx_vol / ir_vol / vol_of_vol: daily 1σ vols (as decimals).
-- stats.corr_crisis: 4x4 crisis correlation matrix in [equity, vol, fx, ir] order.
-- stats.horizon_days: fixed crisis horizon used for √T scaling.
+- stats.corr_crisis: 4×4 crisis correlation matrix in [equity, vol, fx, ir] order.
+- conds.horizon_days: fixed crisis horizon used for √T scaling.
 
 === SCORING RUBRIC ===
 Score quality_score of the analysis BETWEEN 0 AND 1 (1 = perfect, 0 = useless),
-based on how well the analysis addresses the following criteria:
+based on how well the analysis satisfies the following criteria:
 
-1) Correctly identifies the portfolio's main exposures and risks.
-2) Accurately explains what each hedge instrument is intended to cover.
-3) Identifies structural weaknesses or residual risks in the hedge.
-4) Identifies potential hedge failure modes under realistic stress scenarios.
-5) Reasoning is consistent with the data provided (sensitivities, vols, correlations, shocks, factor moves, P&L).
-6) Demonstrates depth of understanding and insight into risk management.
-7) Uses correct figures and financial terminology.
+1) Identifies main exposures and risks.
+2) Explains hedge intent accurately.
+3) Identifies structural weaknesses or residual risks.
+4) Identifies realistic hedge failure modes.
+5) Reasoning matches all provided data.
+6) Demonstrates depth of understanding and insight.
+7) Uses correct financial terminology.
 8) Clear, concise, and well-organized writing.
-9) Avoids vague generalities and unsupported claims.
-10) Shows evidence of critical thinking (not template or boilerplate).
-11) Deep understanding of how shocks propagate through correlated risk factors.
-12) Considers the plausibility of shocks given the provided stats.
-13) Provides specific examples or references to scenario details to support arguments.
-14) Provides insight into how cross-asset interactions amplify risks.
+9) Avoids vague generalities or unsupported claims.
+10) Shows evidence of scenario-specific reasoning (not just repeating
+    generic statements or descriptions that could apply to any portfolio).
+11) Explains how shocks propagate through correlated risk factors.
+12) Considers plausibility under crisis-regime statistics.
+13) References specific scenario details and instrument names.
+14) Explains how cross-asset interactions amplify risks.
 
 Respond ONLY in the following format:
 
@@ -106,7 +111,7 @@ USER_MSG = """
 SUMMARY_SYSTEM_MSG = """
 You are an expert evaluator reviewing the AI's performance across multiple
 hedge-analysis scenarios. Each scenario has two evaluations:
-  • a analysis quality, and
+  • an analysis quality, and
   • a shock efficiency.
 
 Your job is to write a concise meta-summary (150–300 words) following the EXACT
@@ -117,12 +122,13 @@ You must:
   • Identify common gaps or systematic weaknesses across scenarios.
   • Propose next-generation improvements that reference concrete fields such as
     net delta/gamma/vega/FX/DV01, shock_params, factor_moves, or P&L components.
-  • Use the Combined Score provided: = qualitative_score * (1 + quantitative_score), scaled to [0,2].
+  • Use the Combined Score provided: = 0.5 * (qualitative_score + quantitative_score),
+    which lies between 0 and 1.
   • Be precise, data-grounded, and avoid generic or boilerplate language.
 
 REQUIRED OUTPUT FORMAT (DO NOT ALTER SECTION NAMES):
 
-OVERALL PERFORMANCE: <combined_score>/2.0 (<quality level>)
+OVERALL PERFORMANCE: <combined_score>/1.0 (<quality level>)
 # Quality level must be one of: Excellent, Strong, Moderate, Weak, Poor
 
 STRENGTHS ACROSS SCENARIOS:
@@ -144,7 +150,7 @@ NEXT GENERATION FOCUS:
 
 EXAMPLE FOR STRUCTURE:
 ----------
-OVERALL PERFORMANCE: 0.93/2.0 (Excellent – Minor gaps remain)
+OVERALL PERFORMANCE: 0.93/1.0 (Excellent – Minor gaps remain)
 
 STRENGTHS ACROSS SCENARIOS:
   • Identifies major exposures accurately (delta, gamma, vega, FX, IR)
@@ -178,7 +184,7 @@ Write your summary now, following the exact format instructed."""
 def generate_feedback(
     scenarios: list[Scenario],
     stats: RiskStats,
-    config: ScenarioConfig,
+    conds: SearchConds,
     responses: list[ScenarioResponse],
     llm_judge: LLMClient,
 ) -> dict[str, Any]:
@@ -198,12 +204,12 @@ def generate_feedback(
         analysis = response.analysis
         shock = response.shock_params
 
-        factor_moves = calculate_factor_moves(shock, stats)
+        factor_moves = calculate_factor_moves(shock, stats, conds)
         pnl_breakdown = calculate_portfolio_pnl(scenario.exposure, scenario.hedge, factor_moves)
-        metrics = evaluate_scenario_metrics(scenario.exposure, factor_moves, pnl_breakdown.net, config)
+        metrics = evaluate_scenario_metrics(scenario.exposure, factor_moves, pnl_breakdown.net, conds)
         quant_feedback = _format_quantitative_feedback(metrics)
 
-        scenario_text = _format_scenario_for_judge(scenario, stats)
+        scenario_text = _format_scenario_for_judge(scenario, stats, conds)
         user_msg, score, judge_text = _evaluate_single_scenario(
             scenario_text,
             analysis,
@@ -222,7 +228,7 @@ def generate_feedback(
 
     quantitative_score = float(np.mean([m.quantitative_score for m in metrics_list]))
     qualitative_score = float(np.mean(judge_scores))
-    combined_score = qualitative_score * (1.0 + quantitative_score)
+    combined_score = 0.5 * qualitative_score + 0.5 * quantitative_score
 
     public_feedback = {
         "combined_score": combined_score,
@@ -343,6 +349,7 @@ def _format_factor_moves(moves: FactorMoves) -> str:
 def _format_scenario_for_judge(
     scenario: Scenario,
     stats: RiskStats,
+    conds: SearchConds,
 ) -> str:
     lines: list[str] = []
 
@@ -383,7 +390,7 @@ def _format_scenario_for_judge(
     for row in stats.corr_crisis:
         lines.append(f"    {row}")
     lines.append("")
-    lines.append(f"  horizon_days={stats.horizon_days}")
+    lines.append(f"  horizon_days={conds.horizon_days}")
 
     return "\n".join(lines)
 
@@ -409,7 +416,7 @@ def _format_pnl_block(pnl: PnLBreakdown) -> str:
 
 def _format_quantitative_feedback(metrics: ScenarioMetrics) -> str:
     return f"""
-quantitative score: {metrics.quantitative_score:.2f} [-1, +1]
+quantitative score: {metrics.quantitative_score:.2f}/1.0
 total PnL: {metrics.total_pnl:,.0f} JPY
 exposure amount: {metrics.exposure_amount:,.0f} JPY
 loss ratio: {metrics.loss_ratio:.2f}

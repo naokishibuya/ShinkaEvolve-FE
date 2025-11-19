@@ -56,26 +56,32 @@ class RiskStats:
     fx_vol: float            # Daily FX volatility (1σ) as a decimal
     ir_vol: float            # Daily interest rate volatility (1σ) as a decimal (on yield in decimal units)
     corr_crisis: np.ndarray  # shape (4, 4); Crisis-regime correlation matrix: order [equity, vol, fx, ir]
-    horizon_days: int        # crisis horizon for √T scaling
+
+
+@dataclass
+class SearchConds:
+    horizon_days: int        # crisis horizon in days for √T scaling
+    loss_ratio: float        # designated loss ratio vs exposure, e.g. 0.25 for 25%
+    joint_sigma: float       # designated overall crisis severity in σ units, e.g. 3.0 for 3σ
 
 
 @dataclass
 class Rationale:
-    equity: str | None         # why the equity shock direction/magnitude was chosen
-    volatility: str | None     # why the vol shock direction/magnitude was chosen
-    fx: str | None             # FX rationale
-    rates: str | None          # rates rationale (based on DV01 in JPY per 1bp)
+    equity: str | None       # why the equity shock direction/magnitude was chosen
+    volatility: str | None   # why the vol shock direction/magnitude was chosen
+    fx: str | None           # FX rationale
+    rates: str | None        # rates rationale (based on DV01 in JPY per 1bp)
 
 
 @dataclass
 class ShockParams:
     # Final per-factor shocks in sigma units (1-day volatility) before time scaling
     # and macro knobs. 
-    eq_shock_sigma: float      # equity shock in σ units (signed), e.g. -10.0 for -10σ equity
-    vol_shock_sigma: float     # volatility shock in σ units (signed), e.g. +10.0 for +10σ vol
-    fx_shock_sigma: float      # FX shock in σ units (signed), e.g. +8.0  for +8σ FX
-    ir_shock_sigma: float      # rate shock in σ units (signed), e.g. +5.0 for +5σ move on decimal yields
-    rationale: Rationale       # textual justifications
+    eq_shock_sigma: float    # equity shock in σ units (signed), e.g. -10.0 for -10σ equity
+    vol_shock_sigma: float   # volatility shock in σ units (signed), e.g. +10.0 for +10σ vol
+    fx_shock_sigma: float    # FX shock in σ units (signed), e.g. +8.0  for +8σ FX
+    ir_shock_sigma: float    # rate shock in σ units (signed), e.g. +5.0 for +5σ move on decimal yields
+    rationale: Rationale     # textual justifications
 
 
 @dataclass
@@ -84,18 +90,9 @@ class ScenarioResponse:
     shock_params: ShockParams
 
 
-# This is not exposed to the AI coder
-@dataclass
-class ScenarioConfig:
-    target_loss_ratio: float   # e.g. 0.5 for 50% loss vs exposure
-    target_joint_sigma: float  # e.g. 3.0 for crisis-like overall shock
-
-
 def load_scenarios(path: str | Path | None = None):
     path = Path(path or Path(__file__).parent / "scenarios.yaml")
     data = yaml.safe_load(path.read_text())
-
-    stats = load_stats(data["stats"])
 
     scenarios = []
     for s in data["scenarios"]:
@@ -112,9 +109,10 @@ def load_scenarios(path: str | Path | None = None):
             )
         )
 
-    config = load_config(data["config"])
+    stats = load_stats(data["stats"])
+    conds = load_conds(data["conds"])
 
-    return scenarios, stats, config
+    return scenarios, stats, conds
 
 
 def load_stats(cfg):
@@ -124,18 +122,20 @@ def load_stats(cfg):
         fx_vol=float(cfg["fx_vol"]),
         ir_vol=float(cfg["ir_vol"]),
         corr_crisis=np.array(cfg["corr_crisis"], float),
-        horizon_days=int(cfg["horizon_days"]),
     )
 
 
-def load_config(cfg) -> ScenarioConfig:
-    target_loss_ratio = float(cfg["target_loss_ratio"])
-    target_joint_sigma = float(cfg["target_joint_sigma"])
-    assert target_loss_ratio > 0.0, "target_loss_ratio must be positive"
-    assert target_joint_sigma > 0.0, "target_joint_sigma must be positive"
-    return ScenarioConfig(
-        target_loss_ratio=target_loss_ratio,
-        target_joint_sigma=target_joint_sigma,
+def load_conds(cfg) -> SearchConds:
+    horizon_days = int(cfg["horizon_days"])
+    loss_ratio = float(cfg["loss_ratio"])
+    joint_sigma = float(cfg["joint_sigma"])
+    assert horizon_days > 0, "horizon_days must be positive"
+    assert loss_ratio > 0.0, "loss_ratio must be positive"
+    assert joint_sigma > 0.0, "joint_sigma must be positive"
+    return SearchConds(
+        horizon_days=horizon_days,
+        loss_ratio=loss_ratio,
+        joint_sigma=joint_sigma,
     )
 
 

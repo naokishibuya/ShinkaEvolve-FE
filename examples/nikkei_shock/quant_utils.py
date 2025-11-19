@@ -1,7 +1,7 @@
 import math
 import numpy as np
 from dataclasses import dataclass
-from scenario import Instrument, RiskStats, ScenarioConfig, ShockParams
+from scenario import Instrument, RiskStats, SearchConds, ShockParams
 
 
 @dataclass
@@ -51,13 +51,12 @@ class ScenarioMetrics:
     exposure_amount: float
     loss_ratio: float
     joint_sigma: float
-    norm_loss: float
-    norm_sigma: float
 
 
 def calculate_factor_moves(
     shock: ShockParams,
     stats: RiskStats,
+    conds: SearchConds,
 ) -> FactorMoves:
     # Calculate factor moves based on shock parameters
     sigma_vec_arr = np.array(
@@ -70,7 +69,7 @@ def calculate_factor_moves(
         dtype=float,
     )
 
-    sqrt_t = math.sqrt(stats.horizon_days)
+    sqrt_t = math.sqrt(conds.horizon_days)
 
     vols = np.array(
         [
@@ -179,7 +178,7 @@ def evaluate_scenario_metrics(
     exposure: list[Instrument],
     factor_moves: FactorMoves,
     net_pnl: PnLTotals,
-    config: ScenarioConfig,
+    conds: SearchConds,
 ) -> ScenarioMetrics:
 
     # If loss_ratio <= 0 : hedges help too much.
@@ -191,16 +190,38 @@ def evaluate_scenario_metrics(
 
     joint_sigma = factor_moves.joint_sigma
 
-    def normalize(value: float, target: float = 1.0) -> float:
-        raw = value / target # Raw normalization using target
-        return raw / (1.0 + abs(raw))  # Rational squash each (maps ℝ to (-1,1))
-
-    norm_loss  = normalize(loss_ratio, config.target_loss_ratio)    # 0.5 at target loss
-    norm_sigma = normalize(joint_sigma, config.target_joint_sigma)  # 0.5 at target severity
-
-    score = normalize(norm_loss - norm_sigma)  # (-1, 1), 0.0 at balanced targets
-
-    hint = _quant_hint(score, norm_loss, norm_sigma)
+    # scoring
+    if loss_ratio <= 0.0:
+        score = 0.0
+        hint = (
+            f"No loss incurred: loss_ratio={loss_ratio:.2f} (≤ 0.0). "
+            "Increase the adversarial impact of your shocks on net exposures. "
+            "Consider increasing shock magnitudes or directions to amplify losses."
+        )
+    elif loss_ratio < conds.loss_ratio:
+        # Give partial credit since we are only talking about loss_ratio here
+        score = 0.5 * loss_ratio / conds.loss_ratio
+        hint = (
+            f"Loss is too small: loss_ratio={loss_ratio:.2f} (< required {conds.loss_ratio:.2f}). "
+            "Increase the adversarial impact of your shocks on net exposures. "
+            "Do not worry about keeping severity low until you reach the required loss level."
+        )
+    elif joint_sigma > conds.joint_sigma:
+        # Penalize excessive severity smoothly
+        excess = joint_sigma - conds.joint_sigma
+        score = 1.0 / (1.0 + math.exp(excess)) + 0.5  # (0.5, 1.0]
+        hint = (
+            f"Loss meets the condition: loss_ratio={loss_ratio:.2f} (≥ required {conds.loss_ratio:.2f}), "
+            f"but severity is high: sigma={joint_sigma:.2f} (> configured {conds.joint_sigma:.2f}). "
+            "Try reducing the overall joint sigma while keeping the loss above the required level."
+        )
+    else:
+        score = 1.0
+        hint = (
+            f"Loss meets the condition: loss_ratio={loss_ratio:.2f} (≥ required {conds.loss_ratio:.2f}), "
+            f"and severity is efficient: sigma={joint_sigma:.2f} (≤ allowed {conds.joint_sigma:.2f}). "
+            "Further improvements are marginal; focus on refining the qualitative analysis."
+        )
 
     return ScenarioMetrics(
         quantitative_score=score,
@@ -209,41 +230,4 @@ def evaluate_scenario_metrics(
         exposure_amount=exposure_amount,
         loss_ratio=loss_ratio,
         joint_sigma=joint_sigma,
-        norm_loss=norm_loss,
-        norm_sigma=norm_sigma,
     )
-
-
-def _quant_hint(score: float, norm_loss: float, norm_sigma: float) -> str:
-    """
-    norm_loss:  (-1,1), 0.5 at target loss
-    norm_sigma: (-1,1), 0.5 at target severity
-    score:      (-1,1), loss-minus-severity balance
-    """
-
-    # Loss message
-    if norm_loss <= 0:
-        loss_msg = "Loss is absent; adjust shock directions so they hit the main net exposures."
-    elif norm_loss < 0.5:
-        loss_msg = "Loss is below the desired scale; point factor shocks more directly at strongest delta/gamma/vega/FX/DV01."
-    else:
-        loss_msg = "Loss is on or above the desired scale."
-
-    # Severity message
-    if norm_sigma < 0.3:
-        sigma_msg = "Shock magnitudes are mild; increase sigmas while keeping directions crisis-consistent."
-    elif norm_sigma < 0.7:
-        sigma_msg = "Shock magnitudes are crisis-like."
-    else:
-        sigma_msg = "Shock magnitudes are large; reduce sigmas while preserving loss."
-
-    # Balance (loss vs severity) message
-    if score < -0.3:
-        bal_msg = "Shocks are oversized relative to the loss; refine directions or scale down sigmas."
-    elif score < 0.3:
-        bal_msg = "Loss and shock size are roughly aligned; small directional adjustments may improve impact."
-    else:
-        bal_msg = "Loss and shock size are well-balanced."
-
-    return f"{loss_msg} {sigma_msg} {bal_msg}"
-

@@ -6,6 +6,7 @@ from scenario import (
     GreeksBreakdown,
     Scenario,
     RiskStats,
+    SearchConds,
     Rationale,
     ShockParams,
     ScenarioResponse,
@@ -13,7 +14,11 @@ from scenario import (
 
 
 # EVOLVE-BLOCK-START
-def analyze_hedge_weakness(scenario: Scenario, stats: RiskStats) -> ScenarioResponse:
+def analyze_hedge_weakness(
+    scenario: Scenario,
+    stats: RiskStats,
+    conds: SearchConds,
+) -> ScenarioResponse:
     """Analyze hedge weaknesses and propose worst-case shock parameters."""
     # IMPORTANT: Do NOT change this function signature or the returned structure.
 

@@ -1,19 +1,10 @@
 # ShinkaEvolve-FE (Financial Engineering)
 
-ShinkaEvolve-FE is a POC project based on the [SakanaAI's ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve) that applies LLM-driven program evolution to financial engineering problems, specifically cross-asset risk analysis and stress testing.
+ShinkaEvolve-FE is a POC inverse stress-testing system, based on [SakanaAI's ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve), that uses LLM-driven program evolution to construct realistic and crisis-coherent shock scenarios for cross-asset portfolios.
 
-## Motivation
+# Motivation
 
-Institutional risk managers face a fundamental challenge: **portfolios that appear well-hedged under normal conditions can fail catastrophically during market crises**. Traditional stress testing often relies on historical scenarios or simple sensitivity analysis, which may miss:
-
-- **Correlation breakdowns**: Hedges that work in normal markets can amplify losses when asset correlations shift during crises
-- **Convexity risks**: Non-linear exposures (gamma, vega) that matter more during large moves
-- **Cross-asset transmission**: How equity shocks propagate through volatility, FX, and interest rates
-- **Hedge inefficiencies**: Over-hedged positions that bleed costs or under-hedged ones that leave residual risk
-
-This project addresses these challenges by **evolving AI agents that discover portfolio weaknesses** through adversarial stress testing. Rather than relying on fixed scenarios, the system uses LLM-based evolution to iteratively improve both:
-1. **Risk analysis quality**: How well the AI explains exposures, hedge intent, and failure modes
-2. **Shock efficiency**: How effectively multi-factor shocks exploit portfolio weaknesses
+In crisis regimes, portfolio losses are shaped by more than linear sensitivities. They arise from correlation shifts, nonlinear exposures, and cross-asset feedback effects. Given a portfolio and a crisis-regime correlation matrix, it is not immediately clear what combination of equity, volatility, FX, and rate shocks would plausibly generate a designated loss and severity over a chosen horizon. ShinkaEvolve-FE addresses this inverse problem by evolving an AI analyst that understands hedge intent, convexity effects, and crisis co-movements, producing interpretable multi-factor scenarios that satisfy the configured settings while exposing the structural vulnerabilities they depend on.
 
 ## The Nikkei Shock Implementation
 

@@ -10,19 +10,18 @@ stats:
   ir_vol: 0.0015      # JGB 10Y yield daily vol ~0.15% (15bp)
 
   # Crisis regime correlation matrix [eq, vol, fx, ir]
-  # Crisis: strong flight-to-safety, higher cross-asset comovement
   corr_crisis:
     - [1.00, -0.80, -0.40, -0.50]  # EQ crash → vol spike, JPY strength, yield drop
     - [-0.80, 1.00,  0.30,  0.40]  # VOL spike strongly linked to EQ selloff and risk-off
     - [-0.40, 0.30,  1.00,  0.20]  # FX: JPY tends to strengthen when EQ falls (USDJPY down)
     - [-0.50, 0.40,  0.20,  1.00]  # IR: yields fall (flight to JGBs)
-  horizon_days: 10       # 10 days
 
 
-# for quantitative scoring
-config:
-   target_loss_ratio: 0.25  # what is considered to be severe loss
-   target_joint_sigma: 3.0  # crisis-like overall shock severity
+# search conditions
+conds:
+  horizon_days: 10    # 10 days
+  loss_ratio: 0.25    # designated crisis loss ratio
+  joint_sigma: 3.0    # designated crisis shock severity
 
 
 # Individual scenarios (zero parameters omitted for clarity)
