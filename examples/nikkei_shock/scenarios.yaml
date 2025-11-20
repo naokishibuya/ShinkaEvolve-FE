@@ -15,13 +15,9 @@ stats:
     - [-0.80, 1.00,  0.30,  0.40]  # VOL spike strongly linked to EQ selloff and risk-off
     - [-0.40, 0.30,  1.00,  0.20]  # FX: JPY tends to strengthen when EQ falls (USDJPY down)
     - [-0.50, 0.40,  0.20,  1.00]  # IR: yields fall (flight to JGBs)
-
-
-# search conditions
-conds:
-  horizon_days: 10    # 10 days
-  loss_ratio: 0.25    # designated crisis loss ratio
-  joint_sigma: 3.0    # designated crisis shock severity
+  horizon_days: 10     # 10 trading days
+  max_factor_sigma: 3.0  # Per-factor bound: each factor in [-3σ, +3σ] range
+  max_joint_sigma: 4.0   # Joint Mahalanobis distance bound (allows diverse shock combinations)
 
 
 # Individual scenarios (zero parameters omitted for clarity)

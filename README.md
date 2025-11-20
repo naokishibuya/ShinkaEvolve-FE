@@ -1,306 +1,291 @@
 # ShinkaEvolve-FE (Financial Engineering)
 
-ShinkaEvolve-FE is a POC inverse stress-testing system, based on [SakanaAI's ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve), that uses LLM-driven program evolution to construct realistic and crisis-coherent shock scenarios for cross-asset portfolios.
+ShinkaEvolve-FE is a Proof-of-Concept financial risk-analysis system built on top of
+[SakanaAI’s ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve). It demonstrates how Shinka can evolve a reusable prompt-building function that automatically generates consistent, scenario-specific hedge-weakness analysis using LLMs. The system does not replace pricing or optimisation. Instead, it automates the natural-language analysis that normally follows quantitative stress results.
 
-# Motivation
+In this POC, a simple Greek-based optimisation model produces worst-case multi-factor crisis shocks under realistic per-factor sigma limits. Shinka consumes these quantitative outputs and produces structured prompts that guide an LLM to explain why the stress scenario is harmful, how hedges behave under crisis correlations, and which risk factors dominate the loss.
 
-In crisis regimes, portfolio losses are shaped by more than linear sensitivities. They arise from correlation shifts, nonlinear exposures, and cross-asset feedback effects. Given a portfolio and a crisis-regime correlation matrix, it is not immediately clear what combination of equity, volatility, FX, and rate shocks would plausibly generate a designated loss and severity over a chosen horizon. ShinkaEvolve-FE addresses this inverse problem by evolving an AI analyst that understands hedge intent, convexity effects, and crisis co-movements, producing interpretable multi-factor scenarios that satisfy the configured settings while exposing the structural vulnerabilities they depend on.
+The quality of each analysis is then evaluated by a separate reviewer LLM, which scores the output and provides feedback. These scores serve as the fitness signal for Shinka’s evolution process, allowing the prompt-building function to improve over generations.
 
-## The Nikkei Shock Implementation
+This illustrates a practical separation of responsibilities:
+quantitative models compute the scenario, and Shinka automates and iteratively improves the explanatory analysis layer.
 
-The `examples/nikkei_shock` implementation demonstrates this approach on Japanese institutional portfolios with realistic cross-asset dynamics:
+## Motivation
 
-### Core Components
+Stress tests often reveal losses driven by:
 
-1. **Portfolio Scenarios** ([scenarios.yaml](examples/nikkei_shock/scenarios.yaml))
-   - Six carefully designed portfolios with different hedge vulnerabilities
-   - Each includes exposure instruments (e.g., physical Nikkei stocks) and hedge instruments (futures, puts, FX hedges, JGBs)
-   - Instruments have full Greek profiles: delta, gamma, vega, FX sensitivity, and DV01
-   - Synthetic market statistics: daily volatilities for equity (1.2%), vol-of-vol (2%), USDJPY (0.6%), JGB yields (0.15%)
-   - Crisis correlation matrix capturing flight-to-safety dynamics (equity crash → vol spike + JPY strength + yield drop)
+- nonlinear exposures (gamma, vega),
+- stressed correlation dynamics,
+- basis risk (imperfect hedge alignment),
+- cross-asset feedback effects.
 
-2. **AI-Driven Analysis** ([initial.py](examples/nikkei_shock/initial.py))
-   - LLM evolves the `analyze_hedge_weakness()` function through generations
-   - Must identify net exposures from Greek breakdowns (delta, gamma, vega, FX, DV01)
-   - Determine what each hedge instrument protects against
-   - Find structural weaknesses and residual risks
-   - Propose adversarial multi-factor shocks that exploit those weaknesses
-   - Returns both qualitative analysis (textual explanation) and quantitative shock parameters (sigma units per factor)
+Modern LLMs offer strong natural-language capabilities that can complement quantitative stress-testing outputs. This POC combines a simple quantitative model with LLM-generated analysis: the model produces worst-case shocks and P&L, and Shinka constructs prompts that guide an LLM to explain the resulting hedge behaviour and loss drivers.
 
-3. **Dual Evaluation System** ([evaluate.py](examples/nikkei_shock/evaluate.py), [feedback.py](examples/nikkei_shock/feedback.py))
+The aim is to support analysts by producing clear, scenario-specific commentary directly from quantitative results. Keeping the numerical stress model and the analysis layer separate allows the same architecture to be used with more complex pricing engines and existing risk-analysis systems, without requiring major changes to their existing workflows.
 
-   **Quantitative Scoring** ([quant_utils.py](examples/nikkei_shock/quant_utils.py)):
-   - Converts shock sigmas → actual factor moves using crisis correlations and √T scaling
-   - Computes portfolio P&L breakdown by factor (equity, vol, FX, rates)
-   - Measures loss ratio (loss / exposure) and joint sigma (Mahalanobis distance)
-   - Normalizes both metrics against targets using rational squashing: `x/(1+|x|)` maps ℝ to (-1,1)
-     - `norm_loss = 0.5` at target loss ratio (25% by default)
-     - `norm_sigma = 0.5` at target crisis severity (3σ Mahalanobis by default)
-   - Final score = `normalize(norm_loss - norm_sigma)` ∈ (-1, 1)
-     - Score = 0.0 when both targets are met (balanced stress test)
-     - Positive scores: loss outpaces severity (efficient shock)
-     - Negative scores: excessive severity for limited loss (inefficient shock)
+## Project Scope
 
-   **Qualitative Scoring** (LLM Judge):
-   - Another LLM evaluates the analysis quality on 5 criteria:
-     1. Correctly identifies main net exposures and hedge intent
-     2. Identifies structural weaknesses and hedge failure modes
-     3. Consistency with data (sensitivities, correlations, actual P&L)
-     4. Shows insight into cross-asset interactions
-     5. Technical accuracy and clarity
-   - Very strict grading: shallow or generic analyses receive low scores
+What this POC **does**:
 
-   **Combined Feedback**:
-   - Final score = 0.5 × quantitative + 0.5 × qualitative
-   - Meta-judge LLM summarizes performance across scenarios
-   - Provides structured feedback: strengths, common gaps, and next-generation focus areas
-   - This feedback guides the evolutionary process toward better analysis
+- uses a simple stress-testing model,
+- separates optimisation from analysis,
+- evolves stable prompt-building logic,
+- demonstrates how LLMs can assist in financial risk reporting.
 
-4. **Evolution Loop** (Shinka Framework)
-   - LLM coder mutates the `analyze_hedge_weakness()` function based on feedback
-   - Each generation is evaluated on all 6 scenarios
-   - Winners are selected based on combined scores
-   - Over generations, the AI learns to:
-     - Write more insightful risk analysis
-     - Design more efficient adversarial shocks
-     - Better exploit cross-asset correlation dynamics
-     - Identify subtle hedge weaknesses (basis risk, convexity mismatches, etc.)
+What it does **NOT** do:
 
-### Key Innovation: Multi-Dimensional Quality with Balanced Optimization
+- price complex nonlinear instruments,
+- implement a full production risk engine,
+- claim to replace quantitative modelling.
 
-Unlike traditional optimization (which might just maximize P&L loss), this system co-optimizes three dimensions:
+The architecture is intentionally minimal but extensible.
 
-1. **Analysis quality** (qualitative score ∈ [0, 1]): The AI must *explain why* a shock is dangerous, not just find it
-   - Evaluated by LLM judge on technical accuracy, insight, and clarity
+# Architecture Overview
 
-2. **Shock efficiency** (quantitative score ∈ (-1, 1)): Losses must come from realistic crisis-like scenarios
-   - Measures balance between portfolio loss and shock severity
-   - Score = 0.0 when loss ratio and Mahalanobis distance both hit configured targets
-   - Rewards finding weaknesses without resorting to extreme "tail of tail" shocks
+The system consists of four roles:
 
-3. **Cross-asset coherence** (embedded in quantitative score): Shocks must respect crisis correlations
-   - Mahalanobis distance penalizes correlation-inconsistent factor combinations
-   - E.g., equity down + vol up + JPY strong is lower-sigma than uncorrelated shocks
+1. **Quant Optimizer**
 
-**Combined score** = 0.5 × quantitative + 0.5 × qualitative ∈ (-0.5, 1.0)
+    A simple Greek-based model combined with a standard numerical optimizer (for example, SQP or Nelder–Mead) is used to find factor shocks within a chosen sigma threshold (e.g., ±3σ per factor) that approximately maximise portfolio loss.
 
-This design ensures evolved agents produce **interpretable, realistic stress tests** rather than gaming the system with implausible scenarios or brute-force severity.
+    Output includes:
+    - factor shocks in sigma units,
+    - P&L,
+    - loss ratio,
+    - a crisis severity measure (e.g., Mahalanobis distance).
 
-### Example Workflow
+2. **Shinka Prompt-Builder Function**.
 
-```python
-# Scenario: Portfolio with 100B yen Nikkei stocks, hedged with:
-# - 80B short Nikkei futures (80% linear hedge)
-# - 5B long ATM puts (convexity protection)
-# - 50B short USDJPY futures (JPY strength hedge)
-# - -1B DV01 JGB futures (yield-drop hedge)
+    Shinka evolves a Python function that:
+    - reads exposures, hedges, Greeks, and crisis statistics,
+    - reads optimized factor shocks and P&L,
+    - constructs a clean, structured prompt for the analyst LLM.  
 
-# AI analyzes the greeks_breakdown:
-# Net delta: +20B (under-hedged on linear equity)
-# Net gamma: +40B (positive convexity from puts)
-# Net vega: +20B (benefits from vol spike)
-# Net FX: -50B (benefits from JPY strength)
-# Net DV01: -1B (benefits from yield drop)
+    This function is refined over Shinka’s evolution loop.
 
-# AI identifies weakness:
-# "FX hedge assumes JPY strengthens in crisis, but if JPY weakens
-#  (e.g., inflation scare), the -50B FX position amplifies losses"
+3. **Analyst LLM**
 
-# AI proposes shock:
-# eq_shock_sigma: -8.0  (equity crash)
-# vol_shock_sigma: +3.0 (moderate vol spike)
-# fx_shock_sigma: +6.0  (JPY weakens - adversarial to FX hedge)
-# ir_shock_sigma: +4.0  (yields rise - adversarial to JGB position)
+    The analyst LLM:
+    - receives the prompt and produces the natural-language hedge-weakness analysis,
+    - is not limited to predefined templates or rule-based boilerplate,
+    - adapts the explanation to the specific portfolio, shocks, and crisis dynamics in each scenario.
 
-# Evaluation:
-# - Quantitative:
-#   - P&L: -15B (15% loss ratio), joint_sigma: 3.2
-#   - norm_loss = normalize(0.15 / 0.25) = 0.375  (below target)
-#   - norm_sigma = normalize(3.2 / 3.0) = 0.516   (slightly above target)
-#   - score = normalize(0.375 - 0.516) = -0.066   (slightly inefficient)
-# - Qualitative: Judge scores analysis 0.75/1.0 for clear identification of FX weakness
-# - Combined: 0.5 × (-0.066) + 0.5 × 0.75 = 0.342
-# - Feedback: "Loss below target; aim shocks more directly at net delta/gamma/vega"
+4. **Reviewer LLM**
+
+    The reviewer LLM evaluates the analysis across several dimensions:
+    - correct identification of exposures,
+    - hedge-intent interpretation,
+    - consistency with the scenario data,
+    - cross-asset crisis reasoning,
+    - clarity and structure.
+
+    Reviewer feedback drives Shinka’s evolution loop.
+
+The optimisation and pricing remain deterministic; only the narrative layer is evolved.
+
+> This setup is loosely reminiscent of an actor–critic pattern. The prompt-builder function is the component being optimised (“actor”), because it determines what prompt the analyst LLM receives. The reviewer LLM acts as the “critic,” providing structured feedback that guides the evolution of the prompt-builder over generations. However, analogy breaks since only the prompt-builder code evolves; both LLMs remain fixed.
+>
+> The evolution process also has a student–teacher character. The coder LLM (a smaller model) performs the mutations, while the reviewer LLM (typically a larger, more capable model) provides higher-quality feedback. This resembles a teacher supervising a student’s improvements, though no model distillation occurs—only the prompt-builder function is refined.
+
+## Quantitative Stress Scenario
+
+The quantitative model is deliberately simple:
+
+- Four crisis factors: equity, vol-of-vol, FX (USDJPY), and rates.
+- Crisis volatility and correlation from YAML configuration.
+- Factor bounds (e.g., ±3σ).
+- 10-day horizon scaling using sqrt(T).
+- Linear + quadratic P&L approximation from aggregated Greeks.
+
+A numerical optimizer solves:
+
+```
+    maximize   L(r)
+    subject to -3 ≤ r_i ≤ 3
 ```
 
-## Feature Highlights
+where:
 
-- **Native Ollama support** ([shinka/llm/models/ollama.py](shinka/llm/models/ollama.py)): Use `ollama::model-name` in configs to run local chat, coder, or embedding models alongside cloud providers
-- **Structured dataclass contracts**: Type-safe interfaces ensure LLM-generated code matches evaluation expectations
-- **Multi-scenario evaluation**: Each generation tested on 6 diverse portfolios to avoid overfitting
-- **Interpretable feedback loop**: Text summaries guide evolution toward better analysis, not just better scores
+- $r$ is the vector of individual factor shocks in sigma units  
+  (e.g., $r = [r_{\text{eq}}, r_{\text{vol}}, r_{\text{fx}}, r_{\text{ir}}]$),
+- $r_i$ is the shock applied to each factor $i$,
+- $L(r)$ is the portfolio P&L under the Greek-based approximation.
+
+The optimiser's output is treated as ground truth for Shinka’s analysis.
+
+A separate crisis-severity measure, based on [Mahalanobis distance](https://en.wikipedia.org/wiki/Mahalanobis_distance) and refered to here as **joint sigma**, quantifies how extreme the combined shock configuration is under the assumed covariance. Given the factor shocks $r$ and the covariance matrix $\Sigma$, the joint sigma is computed as:
+
+$$
+\text{joint\_sigma}(r) = \sqrt{r^\top \Sigma^{-1} r}.
+$$
+
+Joint sigma provides an optional sense of how crisis-like the shock configuration is under the specified covariance structure.
+
+## Coder LLM, Prompt Builder and Scenario Ontology
+
+The coder LLM receives the instruction messages to write the prompt-builder function. This function organises the scenario data and quantitative outputs into a text prompt for the analyst LLM.
+
+The prompt-builder function does not parse free-form text. Instead, it receives the scenario and quantitative outputs in structured form (mostly dataclasses), for example:
+
+- scenario metadata (name, description),
+- exposure and hedge instruments,
+- net Greeks,
+- crisis statistics (volatility, correlation, horizon),
+- optimised factor shocks,
+- P&L metrics (loss in JPY, loss ratio, joint sigma).
+
+These structures act as a simple ontology for the task: they define what a scenario is, what an instrument is, and how shocks and P&L are represented.
+
+The prompt-builder function is responsible for turning the structured data into a text prompt to guide the analyst LLM, which is a more capable model than the coder LLM, to produce natural-language analysis specific to the scenario.
+
+## Reviwer LLM
+
+The reviewer LLM evaluates the quality and correctness of the analyst’s output. It receives:
+- the system message defining evaluation criteria,
+- the full scenario description (structured data rendered as text),
+- the analyst LLM’s analysis, and
+- a small quantitative summary block (shocks, P&L, loss ratio, joint sigma).
+
+```
+SHOCK PARAMETERS (Optimizer Output)
+------------------------------------
+  Equity shock:         -2.80 σ
+  Vol shock:            +2.50 σ
+  FX shock (USDJPY):    +2.70 σ
+  IR shock:             +0.30 σ
+  Joint sigma:           4.12   (Mahalanobis distance)
+
+FACTOR MOVES (After Volatility & √T Scaling)
+---------------------------------------------
+  Equity move:         -8.9400%
+  Vol move:            +7.9057%
+  FX move:             +6.0750%
+  IR move:             +0.1423%
+
+PORTFOLIO P&L (JPY Billions)
+-----------------------------
+  Net Total P&L:        -12.34 bn
+    └─ Exposure P&L:    -45.67 bn
+    └─ Hedge P&L:       +33.33 bn
+
+  Net P&L by Factor:
+    • Equity:           -8.50 bn
+    • Vol:              -2.30 bn
+    • FX:               -1.20 bn
+    • Rates:            -0.34 bn
+
+  Loss:                 12.34 bn
+  Loss Ratio:           12.34% (vs exposure notional)
+```
+
+The reviewer checks whether the analysis is numerically consistent with the scenario data and provides both a score and textual feedback. This feedback is used by Shinka to improve the prompt-builder over generations.
+
+## Evolution Loop (Summary)
+
+The prompt-builder function (stored in examples/nikkei_shock/initial.py) is the component evolved by Shinka. It receives the scenario and quantitative outputs in structured form and assembles the text prompt for the analyst LLM.
+
+During evolution:
+
+1. The coder LLM mutates the prompt-builder code to produce candidate versions.
+2. Each version generates prompts for each scenario.
+3. The analyst LLM produces written analyses.
+4. The reviewer LLM evaluates the analyses for correctness and clarity.
+5. Reviewer feedback serves as the fitness signal (score) for Shinka and text feedback for the coder LLM.
+6. Shinka selects and refines prompt-builders over several generations.
+
+The coder, analyst and reviewer LLMs remain fixed; only the prompt-building logic evolves. The final product is a reusable prompt-builder that consistently produces high-quality, scenario-specific analysis prompts.
+
+# Technical Details
+
+## Directory Overview
+
+```
+configs/
+└── variant/                    # Evolution configurations (local or cloud setups)
+
+examples/
+└── nikkei_shock/
+    ├── scenarios.yaml          # Portfolio definitions and crisis statistics
+    ├── initial.py              # Stub of the prompt-builder function
+    ├── evaluate.py             # Orchestrates optimisation, analysis, and reviewing
+    ├── feedback.py             # Reviewer LLM instructions and scoring helper
+    ├── quant_utils.py          # Quantitative models and optimizer
+    └── scenario.py             # Dataclasses and YAML loading
+
+shinka/
+└── llm/
+    └── models/
+        └── ollama.py           # Adapter for running LLMs locally via Ollama
+```
 
 ## Installation
 
+### 1. Clone repository
+
 ```bash
-# Clone the repository
 git clone https://github.com/naokishibuya/ShinkaEvolve-FE
 cd ShinkaEvolve-FE
-
-# Install uv if you haven't already
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv venv --python 3.11
-source .venv/bin/activate    # On Windows: .venv\Scripts\activate
-uv pip install -e .          # installs Shinka + ollama SDK
 ```
 
-### Ollama Setup
+### 2. Create environment using uv
+
+```bash
+# install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+uv venv --python 3.11
+source .venv/bin/activate
+uv pip install -e .
+```
+
+This installs ShinkaEvolve that supports both local and cloud LLMs.
+
+### 3. Local Ollama models
+
+If you want to run models locally using [Ollama](https://ollama.ai/), install Ollama and pull the required models:
 
 ```bash
 curl https://ollama.ai/install.sh | sh
 
 ollama pull codellama:7b
-ollama pull deepseek-coder:6.7b
 ollama pull qwen2.5-coder:7b
 ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 ```
 
-## Choosing LLMs & Embeddings
+But these models don't perform as well as cloud LLMs like GPT-4.1. It is handy while developing and testing the system locally.
 
-- Cloud API keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) are required for cloud models
-- Ollama respects `OLLAMA_BASE_URL` / `OLLAMA_TIMEOUT` environment variables
-- Mix and match: Use cloud models for coder/judge and local embeddings, or vice versa
+### 4. Cloud providers
+
+To use cloud LLMs, export API keys such as:
+
+```bash
+export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
+```
+
+Or, set them in a `.env` file.
 
 ## Quick Start
 
-### Running Nikkei Shock Evolution
+### Local-only (free) mode
 
-Two preset configurations are available:
-
-**1. Free Local-Only Mode** ([nikkei_shock_example_free.yaml](configs/variant/nikkei_shock_example_free.yaml))
 ```bash
 shinka_launch variant=nikkei_shock_example_free
 ```
-- **Coder LLM**: Uses local Ollama models (default: `llama3.1:8b` or similar)
-- **Judge LLM**: `ollama::llama3.1:8b` for analysis quality evaluation
-- **Evolution**: Zero-budget evolution (generates candidates but minimal selection pressure)
-- **Best for**: Quick experimentation, understanding the workflow, testing on consumer hardware
-- **Limitations**: Analysis quality and shock design may be suboptimal due to smaller model capacity
 
-**2. Cloud-Powered Mode** ([nikkei_shock_example.yaml](configs/variant/nikkei_shock_example.yaml))
+Uses local Ollama models (defined in `configs/variant/nikkei_shock_example_free.yaml`) for testing without incurring cloud costs.
+
+### Cloud-powered mode
+
 ```bash
 shinka_launch variant=nikkei_shock_example
 ```
-- **Coder LLM**: `gpt-4.1-mini` for evolving the analysis function
-- **Judge LLM**: `gpt-4.1` for high-quality analysis evaluation
-- **Evolution**: Small budget evolution (10 generations)
-- **Best for**: Production-quality results, research experiments, discovering subtle hedge weaknesses
-- **Requirements**: OpenAI API key with GPT-4 access
 
-### What Happens During Evolution
-
-1. **Initialization**: Starts with a stub `analyze_hedge_weakness()` function ([initial.py](examples/nikkei_shock/initial.py))
-2. **Evaluation**: Runs on 6 scenarios, receives dual scores (qualitative + quantitative) and text feedback
-3. **Mutation**: LLM coder reads feedback and modifies the function to improve analysis and shock design
-4. **Selection**: Better candidates (higher combined scores) are kept for next generation
-5. **Iteration**: Repeats for configured number of generations
-6. **Output**: Best evolved function saved with performance metrics
-
-You can monitor progress in real-time as each generation's scores and feedback are displayed.
-
-## Directory Highlights
-
-| Path | Purpose |
-|------|---------|
-| **Core Nikkei Shock Implementation** | |
-| [examples/nikkei_shock/scenarios.yaml](examples/nikkei_shock/scenarios.yaml) | Portfolio scenarios with instruments, greeks, market stats, and crisis correlations |
-| [examples/nikkei_shock/initial.py](examples/nikkei_shock/initial.py) | Stub `analyze_hedge_weakness()` function that LLM evolves |
-| [examples/nikkei_shock/evaluate.py](examples/nikkei_shock/evaluate.py) | Evaluation orchestrator: runs scenarios, validates outputs, aggregates metrics |
-| [examples/nikkei_shock/feedback.py](examples/nikkei_shock/feedback.py) | Dual evaluation: LLM judge for analysis quality + quantitative shock scoring |
-| [examples/nikkei_shock/quant_utils.py](examples/nikkei_shock/quant_utils.py) | Financial math: factor moves, P&L calculation, Mahalanobis distance, efficiency scoring |
-| [examples/nikkei_shock/scenario.py](examples/nikkei_shock/scenario.py) | Dataclass definitions and YAML loading for type-safe contracts |
-| **Configuration** | |
-| [configs/variant/nikkei_shock_example.yaml](configs/variant/nikkei_shock_example.yaml) | Cloud-powered setup (GPT-4.1-mini coder + GPT-4.1 judge, 10 generations) |
-| [configs/variant/nikkei_shock_example_free.yaml](configs/variant/nikkei_shock_example_free.yaml) | Free local setup (Ollama models, zero-budget evolution) |
-| [configs/task/nikkei_shock.yaml](configs/task/nikkei_shock.yaml) | Task configuration: system prompt, function contract, evaluation settings |
-| **Framework Extensions** | |
-| [shinka/llm/models/ollama.py](shinka/llm/models/ollama.py) | Ollama adapter for local LLM support (chat and embeddings) |
-| **Upstream Examples** | |
-| `examples/circle_packing`, `examples/ale_bench`, ... | Original ShinkaEvolve examples (unchanged) |
-| `docs/` | Upstream documentation (Getting Started, WebUI, Configuration) |
-
-## Customization Guide
-
-### Adding New Portfolio Scenarios
-
-Edit [scenarios.yaml](examples/nikkei_shock/scenarios.yaml) to add new portfolios:
-
-```yaml
-scenarios:
-  - name: Your Scenario Name
-    description: Brief description of the portfolio and expected vulnerabilities
-    exposure:
-      - name: Asset_Name
-        mtm_value: 100_000_000  # Mark-to-market in JPY
-        eq_linear: 1.0          # Equity delta (per 1σ move)
-        eq_quad: 0.0            # Equity gamma (per σ²)
-        vol_linear: 0.0         # Vega (per 1σ vol move)
-        fx_linear: 0.0          # FX delta (per 1σ FX move)
-        ir_dv01: 0.0            # JPY P&L per +1bp yield move
-    hedge:
-      - name: Hedge_Instrument
-        # ... same structure
-```
-
-**Tips**:
-- Design portfolios with different vulnerabilities (vol crush, FX mismatch, convexity gaps, etc.)
-- Use realistic sensitivities based on actual derivative pricing
-- Add comments explaining expected failure modes to guide evaluation
-
-### Adjusting Evaluation Targets
-
-Modify the `config` section in [scenarios.yaml](examples/nikkei_shock/scenarios.yaml):
-
-```yaml
-config:
-  target_loss_ratio: 0.25   # 25% loss is "severe" (adjust based on risk tolerance)
-  target_joint_sigma: 3.0   # 3σ joint shock is "crisis-like" (Mahalanobis distance)
-```
-
-Higher `target_loss_ratio` demands more damaging shocks; higher `target_joint_sigma` tolerates larger factor moves.
-
-### Using Different LLM Models
-
-Modify variant configs to use different models:
-
-```yaml
-# configs/variant/your_custom_variant.yaml
-evaluate_function:
-  llm_judge:
-    model_names: "anthropic::claude-3.5-sonnet"  # Or "ollama::qwen2.5-coder:14b"
-    temperatures: 0.0
-    max_tokens: 8196
-
-evo_config:
-  llm_models:
-    - "anthropic::claude-3.5-sonnet"  # Coder model
-```
-
-Supported prefixes: `openai::`, `anthropic::`, `google::`, `ollama::`
-
-### Modifying Judge Criteria
-
-Edit the `SYSTEM_MSG` in [feedback.py](examples/nikkei_shock/feedback.py:10-38) to change what the LLM judge evaluates. Current criteria:
-1. Correctly identifies net exposures and hedge intent
-2. Identifies structural weaknesses and failure modes
-3. Consistency with data
-4. Cross-asset interaction insights
-5. Technical accuracy and clarity
-
-Add domain-specific criteria (e.g., regulatory compliance, operational feasibility) as needed.
-
-### Extending to Other Asset Classes
-
-The framework is designed for cross-asset portfolios but can be adapted:
-
-1. **Fixed Income**: Add duration, convexity, spread DV01 to `Instrument`
-2. **Commodities**: Add commodity delta, curve risk, storage costs
-3. **Credit**: Add default correlation, recovery rates, spread sensitivities
-4. **Multi-Currency**: Extend FX sensitivities to multiple currency pairs
-
-Modify [scenario.py](examples/nikkei_shock/scenario.py) dataclasses and [quant_utils.py](examples/nikkei_shock/quant_utils.py) P&L calculations accordingly.
+Uses cloud-powered models (defined in `configs/variant/nikkei_shock_example.yaml`) for higher-quality generations.
 
 ## License & Credits
 
-MIT license (see LICENSE). Based on [SakanaAI/ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve); please cite their [arXiv paper](https://arxiv.org/abs/2509.19349).
+Apache 2.0 license (see [LICENSE](LICENSE)). 
+
+Based on [SakanaAI/ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve); please cite their [arXiv paper](https://arxiv.org/abs/2509.19349).

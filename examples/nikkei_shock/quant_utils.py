@@ -1,62 +1,78 @@
 import math
+import re
 import numpy as np
-from dataclasses import dataclass
-from scenario import Instrument, RiskStats, SearchConds, ShockParams
+from scipy.optimize import minimize
+from quant_types import (
+    Scenario,
+    Instrument,
+    RiskStats,
+    ShockParams,
+    PnL,
+    PnLSummary,
+    FactorMoves,
+)
 
 
-@dataclass
-class FactorMoves:
-    """ factor moves in absolute units and related info """
-    eq_move: float
-    vol_move: float
-    fx_move: float
-    ir_move: float
-    # Mahalanobis distance and related info
-    joint_sigma: float 
+def optimize_worst_case_shock(
+    scenario: Scenario,
+    stats: RiskStats,
+) -> tuple[ShockParams, FactorMoves, PnLSummary]:
 
+    # Precompute inverse correlation matrix
+    corr_inv = np.linalg.inv(stats.corr_crisis)
 
-@dataclass
-class InstrumentPnl:
-    name: str
-    total: float
-    equity: float
-    vol: float
-    fx: float
-    rates: float
+    def calculate_joint_sigma(x: np.ndarray) -> float:
+        # Calculate joint sigma radius based on Mahalanobis distance
+        try:
+            r2 = float(x.T @ corr_inv @ x)
+            joint_sigma = math.sqrt(max(r2, 0.0))
+        except np.linalg.LinAlgError:
+            # In case of singular matrix (no inversion possible)
+            joint_sigma = float(np.linalg.norm(x))
+        return joint_sigma
 
+    def calculate_shock_results(x: np.ndarray) -> tuple[ShockParams, FactorMoves, PnLSummary]:
+        shock = ShockParams(*x)
+        factor_moves = calculate_factor_moves(shock=shock, stats=stats)
+        pnl_summary = calculate_portfolio_pnl(scenario.exposure, scenario.hedge, factor_moves)
+        return shock, factor_moves, pnl_summary
 
-@dataclass
-class PnLTotals:
-    total: float
-    equity: float
-    vol: float
-    fx: float
-    rates: float
+    def objective(x: np.ndarray) -> float:
+        # x = [eq_sigma, vol_sigma, fx_sigma, ir_sigma]
+        _, _, pnl_summary = calculate_shock_results(x)
+        # We want to maximise loss (negative P&L), so we minimise total pnl.
+        return pnl_summary.net.total
 
+    def constraint(x):
+        return 0 if stats.max_joint_sigma > calculate_joint_sigma(x) else -1
 
-@dataclass
-class PnLBreakdown:
-    net: PnLTotals
-    exposure: PnLTotals
-    hedge: PnLTotals
-    exposure_details: list[InstrumentPnl]
-    hedge_details: list[InstrumentPnl]
+    result = minimize(
+        objective,
+        x0=np.array([0.0, 0.0, 0.0, 0.0], dtype=float),
+        method='COBYLA',
+        bounds=[(-stats.max_factor_sigma, stats.max_factor_sigma)] * 4,
+        constraints=[{'type': 'eq', 'fun': constraint}],
+        options={
+            'maxiter': 5000,
+            'disp': True,
+            'rhobeg': 1.0,        # controls initial search radius
+            'tol': 1e-4,          # when to stop improving (looser = faster convergence)
+            'catol': 1e-4,        # how strictly to enforce constraints
+        },
+    )
+    if not result.success:
+        print(f"Optimization failed: {result.message}")
 
+    shock, factor_moves, pnl_summary = calculate_shock_results(result.x)
+    print(result)
+    shock.joint_sigma = calculate_joint_sigma(result.x)
+    return shock, factor_moves, pnl_summary
 
-@dataclass
-class ScenarioMetrics:
-    quantitative_score: float
-    hint: str
-    total_pnl: float
-    exposure_amount: float
-    loss_ratio: float
-    joint_sigma: float
 
 
 def calculate_factor_moves(
     shock: ShockParams,
     stats: RiskStats,
-    conds: SearchConds,
 ) -> FactorMoves:
     # Calculate factor moves based on shock parameters
     sigma_vec_arr = np.array(
@@ -69,7 +85,7 @@ def calculate_factor_moves(
         dtype=float,
     )
 
-    sqrt_t = math.sqrt(conds.horizon_days)
+    sqrt_t = math.sqrt(stats.horizon_days)
 
     vols = np.array(
         [
@@ -84,28 +100,18 @@ def calculate_factor_moves(
     # This gives the absolute moves as per shock sigmas for the horizon
     moves = vols * sigma_vec_arr * sqrt_t
 
-    # Compute joint sigma radius based on Mahalanobis distance
-    try:
-        corr_inv = np.linalg.inv(stats.corr_crisis)
-        r2 = float(sigma_vec_arr.T @ corr_inv @ sigma_vec_arr)
-        joint_sigma = math.sqrt(max(r2, 0.0))
-    except np.linalg.LinAlgError:
-        # In case of singular matrix (no inversion possible)
-        joint_sigma = float(np.linalg.norm(sigma_vec_arr))
-
     return FactorMoves(
         eq_move=float(moves[0]),
         vol_move=float(moves[1]),
         fx_move=float(moves[2]),
         ir_move=float(moves[3]),
-        joint_sigma=joint_sigma,
     )
 
 
 def instrument_pnl(
     instrument: Instrument,
     factor_moves: FactorMoves,
-) -> InstrumentPnl:
+) -> PnL:
     # Calculate PnL contribution of a single instrument given factor moves
     mtm = instrument.mtm_value
 
@@ -119,8 +125,7 @@ def instrument_pnl(
     dV_fx = mtm * instrument.fx_linear * fx
     dV_ir = instrument.ir_dv01 * ir * 10_000.0
 
-    return InstrumentPnl(
-        name=instrument.name,
+    return PnL(
         total=dV_eq + dV_vol + dV_fx + dV_ir,
         equity=dV_eq,
         vol=dV_vol,
@@ -132,102 +137,52 @@ def instrument_pnl(
 def total_net_pnl(
     instruments: list[Instrument],
     factor_moves: FactorMoves,
-) -> tuple[PnLTotals, list[InstrumentPnl]]:
+) -> tuple[PnL, dict[str, PnL]]:
     # Calculate total PnL for a list of instruments
-    details: list[InstrumentPnl] = []
+    pnls: dict[str, PnL] = {}
     for inst in instruments:
-        comp = instrument_pnl(inst, factor_moves)
-        details.append(comp)
+        pnls[inst.name] = instrument_pnl(inst, factor_moves)
 
-    totals = PnLTotals(
-        total=sum(d.total for d in details),
-        equity=sum(d.equity for d in details),
-        vol=sum(d.vol for d in details),
-        fx=sum(d.fx for d in details),
-        rates=sum(d.rates for d in details),
+    totals = PnL(
+        total=sum(d.total for d in pnls.values()),
+        equity=sum(d.equity for d in pnls.values()),
+        vol=sum(d.vol for d in pnls.values()),
+        fx=sum(d.fx for d in pnls.values()),
+        rates=sum(d.rates for d in pnls.values()),
     )
-    return totals, details
+    return totals, pnls
 
 
 def calculate_portfolio_pnl(
     exposure: list[Instrument],
     hedge: list[Instrument],
     factor_moves: FactorMoves,
-) -> PnLBreakdown:
-    exposure_totals, exposure_details = total_net_pnl(exposure, factor_moves)
-    hedge_totals, hedge_details = total_net_pnl(hedge, factor_moves)
+) -> PnLSummary:
+    total_exposure, exposure_details = total_net_pnl(exposure, factor_moves)
+    total_hedge, hedge_details = total_net_pnl(hedge, factor_moves)
 
-    net_totals = PnLTotals(
-        total=exposure_totals.total + hedge_totals.total,
-        equity=exposure_totals.equity + hedge_totals.equity,
-        vol=exposure_totals.vol + hedge_totals.vol,
-        fx=exposure_totals.fx + hedge_totals.fx,
-        rates=exposure_totals.rates + hedge_totals.rates,
+    total_net = PnL(
+        total=total_exposure.total + total_hedge.total,
+        equity=total_exposure.equity + total_hedge.equity,
+        vol=total_exposure.vol + total_hedge.vol,
+        fx=total_exposure.fx + total_hedge.fx,
+        rates=total_exposure.rates + total_hedge.rates,
     )
-
-    return PnLBreakdown(
-        net=net_totals,
-        exposure=exposure_totals,
-        hedge=hedge_totals,
-        exposure_details=exposure_details,
-        hedge_details=hedge_details,
-    )
-
-
-def evaluate_scenario_metrics(
-    exposure: list[Instrument],
-    factor_moves: FactorMoves,
-    net_pnl: PnLTotals,
-    conds: SearchConds,
-) -> ScenarioMetrics:
 
     # If loss_ratio <= 0 : hedges help too much.
     exposure_amount = sum(abs(inst.mtm_value) for inst in exposure)
     if exposure_amount != 0.0:
-        loss_ratio = -net_pnl.total / exposure_amount
+        loss_ratio = -total_net.total / exposure_amount
     else:
         loss_ratio = 0.0
 
-    joint_sigma = factor_moves.joint_sigma
-
-    # scoring
-    if loss_ratio <= 0.0:
-        score = 0.0
-        hint = (
-            f"No loss incurred: loss_ratio={loss_ratio:.2f} (≤ 0.0). "
-            "Increase the adversarial impact of your shocks on net exposures. "
-            "Consider increasing shock magnitudes or directions to amplify losses."
-        )
-    elif loss_ratio < conds.loss_ratio:
-        # Give partial credit since we are only talking about loss_ratio here
-        score = 0.5 * loss_ratio / conds.loss_ratio
-        hint = (
-            f"Loss is too small: loss_ratio={loss_ratio:.2f} (< required {conds.loss_ratio:.2f}). "
-            "Increase the adversarial impact of your shocks on net exposures. "
-            "Do not worry about keeping severity low until you reach the required loss level."
-        )
-    elif joint_sigma > conds.joint_sigma:
-        # Penalize excessive severity smoothly
-        excess = joint_sigma - conds.joint_sigma
-        score = 1.0 / (1.0 + math.exp(excess)) + 0.5  # (0.5, 1.0]
-        hint = (
-            f"Loss meets the condition: loss_ratio={loss_ratio:.2f} (≥ required {conds.loss_ratio:.2f}), "
-            f"but severity is high: sigma={joint_sigma:.2f} (> configured {conds.joint_sigma:.2f}). "
-            "Try reducing the overall joint sigma while keeping the loss above the required level."
-        )
-    else:
-        score = 1.0
-        hint = (
-            f"Loss meets the condition: loss_ratio={loss_ratio:.2f} (≥ required {conds.loss_ratio:.2f}), "
-            f"and severity is efficient: sigma={joint_sigma:.2f} (≤ allowed {conds.joint_sigma:.2f}). "
-            "Further improvements are marginal; focus on refining the qualitative analysis."
-        )
-
-    return ScenarioMetrics(
-        quantitative_score=score,
-        hint=hint,
-        total_pnl=net_pnl.total,
-        exposure_amount=exposure_amount,
+    return PnLSummary(
+        net=total_net,
+        exposure=total_exposure,
+        hedge=total_hedge,
+        exposure_pnls=exposure_details,
+        hedge_pnls=hedge_details,
+        loss=max(0.0, -total_net.total),
+        notional=exposure_amount,
         loss_ratio=loss_ratio,
-        joint_sigma=joint_sigma,
     )

@@ -6,7 +6,13 @@ defaults:
   - _self_
 
 evaluate_function:
-  llm_judge:
+  llm_analyst:
+    model_names: "gpt-4.1"
+    temperatures: 0.0
+    max_tokens: 8196
+    reasoning_efforts: "low"
+    verbose: true
+  llm_reviewer:
     model_names: "gpt-4.1"
     temperatures: 0.0
     max_tokens: 8196
