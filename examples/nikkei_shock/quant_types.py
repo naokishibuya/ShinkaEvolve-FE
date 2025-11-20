@@ -91,4 +91,4 @@ class PnLSummary:
     # Loss metrics
     loss: float        # e.g. max(0, -net.total)
     notional: float
-    loss_ratio: float  # loss / reference_notional
+    loss_ratio: float  # loss / notional

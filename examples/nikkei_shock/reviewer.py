@@ -23,47 +23,62 @@ shock scenario is particularly harmful to this specific hedged portfolio.
 
 Score the analysis on a scale from 0.0 to 1.0 based on:
 
-1. **Exposure Identification** (weight: high)
+1. **Professional Format** (weight: critical, AUTOMATIC PENALTY)
+   - MUST be a direct, professional analysis report
+   - NO conversational openings ("Certainly...", "Sure...", "Here is...")
+   - NO conversational closings ("please let me know...", "if you need...", "feel free to ask...")
+   - NO chat-like language or assistant-style responses
+   - PENALTY: Deduct 0.3-0.5 points for any conversational language
+
+2. **Exposure Identification** (weight: high)
    - Correctly identifies main portfolio exposures from the instruments
    - References specific instrument names and their Greeks
    - Distinguishes between exposure and hedge contributions
 
-2. **Hedge Intent Explanation** (weight: high)
+3. **Hedge Intent Explanation** (weight: high)
    - Explains what each hedge is designed to protect
    - Describes expected hedge behavior under normal conditions
 
-3. **Shock Analysis** (weight: very high)
+4. **Shock Analysis** (weight: very high)
    - Explains why these specific shock directions are harmful
    - References actual shock magnitudes (in σ units)
    - Connects shock severity to the joint_sigma measure
    - Explains how crisis correlations link the factor moves
 
-4. **Loss Driver Explanation** (weight: very high)
+5. **Loss Driver Explanation** (weight: very high)
    - Identifies which factor moves contribute most to the loss
    - Explains how non-linear exposures (gamma, vega) amplify losses
    - Points out where hedges fail or underperform
    - References actual P&L numbers to support reasoning
 
-5. **Data Consistency** (weight: critical)
+6. **Data Consistency and Fidelity** (weight: critical)
+   - Cross-check ALL numerical claims against the QUANTITATIVE SUMMARY table
    - Analysis does not contradict the provided numbers
-   - References match the actual Greeks, shocks, and P&L values
+   - Does NOT introduce instruments, positions, shocks, or scenarios that are not in the data
+   - Referenced shock magnitudes (σ values) match the actual shock parameters
+   - Referenced P&L figures match the actual portfolio P&L breakdown
+   - Referenced factor moves match the actual moves (equity, vol, FX, rates)
    - Numerical reasoning is sound (even if approximate)
 
-6. **Specificity** (weight: high)
+7. **Specificity** (weight: high)
    - Uses scenario-specific detail, not generic statements
    - References actual instruments, numbers, and relationships
    - Avoids boilerplate language that could apply to any portfolio
 
-7. **Technical Quality** (weight: medium)
+8. **Technical Quality and Focus** (weight: medium)
    - Uses appropriate financial terminology correctly
    - Clear structure and organization
-   - Concise and focused
+   - Concise and focused (no unnecessary long-winded reports or off-topic commentary)
 
 === IMPORTANT ===
-- Be STRICT: Generic, shallow, or numerically inconsistent analyses must score low
-- The analysis should explain WHY this shock is bad, not just WHAT the shock is
-- Good analyses reference specific numbers from the data tables below
-- Focus on evaluating the EXPLANATION quality, not the shock design (shocks are pre-computed)
+- Be STRICT: Generic, shallow, hallucinated, or numerically inconsistent analyses must score low.
+- ALWAYS cross-check the analyst's claims against the QUANTITATIVE SUMMARY table below.
+- Verify that referenced shock magnitudes, P&L numbers, and factor moves match the actual data.
+- Penalize analyses that cite incorrect numbers or make claims unsupported by the data.
+- Penalize analyses that are long, vague "consultant reports" instead of focused hedge-weakness explanations.
+- The analysis should explain WHY this shock is bad, not just WHAT the shock is.
+- Good analyses reference specific numbers from the data tables below.
+- Focus on evaluating the EXPLANATION quality, not the shock design (shocks are pre-computed).
 
 Respond ONLY in this exact format:
 
@@ -152,6 +167,7 @@ def generate_feedback(
     shock_params_list: list[ShockParams],
     factor_moves_list: list[FactorMoves],
     pnl_summary_list: list[PnLSummary],
+    prompt_list: list[str],
     analysis_list: list[str],
     llm_reviewer: LLMClient,
 ) -> dict[str, Any]:
@@ -188,17 +204,19 @@ def generate_feedback(
 
     combined_score = float(np.mean(reviewer_scores))
 
-    public_feedback = {
-        "combined_score": combined_score,
-    }
-    for i in range(len(scenarios)):
-        public_feedback[f"analysis_{i+1}"] = f"{reviewer_texts[i]}"
+    public_feedback = {}
+    for i in range(len(analysis_list)):
+        public_feedback[f"analysis_{i+1}"] = f"{analysis_list[i]}"
+    for i in range(len(reviewer_texts)):
+        public_feedback[f"review_{i+1}"] = f"{reviewer_texts[i]}"
 
     private_feedback = {
         "scenarios": [  # ← Full details here
             {
                 "name": scenarios[i].name,
+                "prompt": prompt_list[i],
                 "analysis": analysis_list[i],
+                "review": reviewer_texts[i],
                 "shock_params": _to_json_safe(shock_params_list[i]),
                 "factor_moves": _to_json_safe(factor_moves_list[i]),
                 "pnl_summary": _to_json_safe(pnl_summary_list[i]),

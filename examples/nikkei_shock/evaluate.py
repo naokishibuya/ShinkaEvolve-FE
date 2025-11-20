@@ -77,7 +77,13 @@ def main(
             print(f"Generating analysis {i+1}/{len(prompt_list)} with analyst LLM...")
             response = llm_analyst.query(
                 msg=prompt,
-                system_msg="You are an expert financial risk analyst. Provide a clear, detailed analysis based on the information provided.",
+                system_msg=(
+                    "You are an expert financial risk analyst. "
+                    "Provide a professional analysis report. "
+                    "DO NOT use conversational language like 'Certainly...', 'Sure...', 'Here is...'. "
+                    "DO NOT end with phrases like 'please let me know', 'if you need', 'feel free to ask'. "
+                    "Write as a direct, technical analysis report."
+                ),
                 llm_kwargs=llm_analyst.get_kwargs(),
             )
             analysis_list.append(response.content)
@@ -89,6 +95,7 @@ def main(
             shock_params_list=shock_list,
             factor_moves_list=factor_moves_list,
             pnl_summary_list=pnl_summary_list,
+            prompt_list=prompt_list,
             analysis_list=analysis_list,
             llm_reviewer=llm_reviewer)
 

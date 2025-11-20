@@ -123,8 +123,8 @@ evo_config:
         exposure_pnls: dict[str, PnL] # per-instrument exposure P&L
         hedge_pnls: dict[str, PnL]    # per-instrument hedge P&L
         loss: float                   # max(0, -net.total)
-        reference_notional: float     # sum of |mtm| of exposures
-        loss_ratio: float             # loss / reference_notional
+        notional: float               # sum of |mtm| of exposures
+        loss_ratio: float             # loss / notional
     ```
 
     ## Function Contract
