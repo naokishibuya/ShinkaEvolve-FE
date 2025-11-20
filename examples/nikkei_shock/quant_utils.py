@@ -1,3 +1,8 @@
+"""Quantitative stress testing utilities.
+
+This module implements the optimizer and P&L calculation logic for finding
+worst-case crisis shocks under Greek-based portfolio approximations.
+"""
 import math
 import re
 import numpy as np
@@ -17,7 +22,18 @@ def optimize_worst_case_shock(
     scenario: Scenario,
     stats: RiskStats,
 ) -> tuple[ShockParams, FactorMoves, PnLSummary]:
+    """Find worst-case factor shocks for the given scenario.
 
+    Uses COBYLA optimization to find factor shocks that maximize portfolio loss
+    subject to per-factor sigma bounds and joint sigma constraints.
+
+    Args:
+        scenario: Portfolio scenario with exposure and hedge instruments
+        stats: Market statistics including volatilities and crisis correlations
+
+    Returns:
+        Tuple of (shock parameters, factor moves, P&L summary)
+    """
     # Precompute inverse correlation matrix
     corr_inv = np.linalg.inv(stats.corr_crisis)
 
@@ -74,7 +90,18 @@ def calculate_factor_moves(
     shock: ShockParams,
     stats: RiskStats,
 ) -> FactorMoves:
-    # Calculate factor moves based on shock parameters
+    """Convert shock parameters in sigma units to absolute factor moves.
+
+    Applies volatility and horizon scaling (√T) to convert normalized shocks
+    into actual percentage moves for each risk factor.
+
+    Args:
+        shock: Shock parameters in sigma units
+        stats: Market statistics with daily volatilities and horizon
+
+    Returns:
+        FactorMoves with absolute percentage moves for each factor
+    """
     sigma_vec_arr = np.array(
         [
             shock.eq_shock_sigma,
@@ -112,7 +139,18 @@ def instrument_pnl(
     instrument: Instrument,
     factor_moves: FactorMoves,
 ) -> PnL:
-    # Calculate PnL contribution of a single instrument given factor moves
+    """Calculate P&L for a single instrument under given factor moves.
+
+    Uses linear and quadratic sensitivities (Greeks) to approximate instrument
+    P&L across equity, volatility, FX, and rates factors.
+
+    Args:
+        instrument: Instrument with Greeks and notional
+        factor_moves: Absolute factor moves (as decimals)
+
+    Returns:
+        PnL breakdown by factor and total
+    """
     mtm = instrument.mtm_value
 
     eq = factor_moves.eq_move
@@ -123,6 +161,7 @@ def instrument_pnl(
     dV_eq = mtm * (instrument.eq_linear * eq + 0.5 * instrument.eq_quad * eq * eq)
     dV_vol = mtm * instrument.vol_linear * vol
     dV_fx = mtm * instrument.fx_linear * fx
+    # Convert decimal rate move to bp: DV01 is per 1bp, ir_move is in decimal
     dV_ir = instrument.ir_dv01 * ir * 10_000.0
 
     return PnL(
@@ -138,7 +177,15 @@ def total_net_pnl(
     instruments: list[Instrument],
     factor_moves: FactorMoves,
 ) -> tuple[PnL, dict[str, PnL]]:
-    # Calculate total PnL for a list of instruments
+    """Calculate total P&L across multiple instruments.
+
+    Args:
+        instruments: List of instruments (exposure or hedge)
+        factor_moves: Absolute factor moves
+
+    Returns:
+        Tuple of (total P&L, per-instrument P&L dictionary)
+    """
     pnls: dict[str, PnL] = {}
     for inst in instruments:
         pnls[inst.name] = instrument_pnl(inst, factor_moves)
@@ -158,6 +205,16 @@ def calculate_portfolio_pnl(
     hedge: list[Instrument],
     factor_moves: FactorMoves,
 ) -> PnLSummary:
+    """Calculate complete portfolio P&L including exposure and hedge components.
+
+    Args:
+        exposure: List of exposure instruments
+        hedge: List of hedge instruments
+        factor_moves: Absolute factor moves
+
+    Returns:
+        PnLSummary with net, exposure, and hedge P&L breakdowns plus loss metrics
+    """
     total_exposure, exposure_details = total_net_pnl(exposure, factor_moves)
     total_hedge, hedge_details = total_net_pnl(hedge, factor_moves)
 

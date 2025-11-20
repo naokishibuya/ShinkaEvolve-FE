@@ -1,3 +1,9 @@
+"""Data structures for financial risk analysis.
+
+This module defines the core dataclasses used throughout the nikkei_shock
+stress testing system, including portfolio instruments, Greeks, scenarios,
+risk statistics, and P&L calculations.
+"""
 import numpy as np
 from dataclasses import dataclass
 
@@ -24,7 +30,7 @@ class Greeks:
     gamma: float        # equity gamma (JPY / σ² equity)
     vega: float         # vol sensitivity (JPY / 1σ vol)
     fx: float           # FX sensitivity (JPY / 1σ FX)
-    dv01: float         # rate DV01 (JPY per +1bp move
+    dv01: float         # rate DV01 (JPY per +1bp move)
 
 
 @dataclass

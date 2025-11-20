@@ -14,6 +14,20 @@ def main(
     llm_analyst: dict[str, Any] | None = None,
     llm_reviewer: dict[str, Any] | None = None,
 ) -> tuple[dict, bool, str]:
+    """Orchestrate evaluation of prompt-builder function.
+
+    Runs the evaluation flow: load scenarios → optimize shocks → generate prompts
+    → invoke analyst LLM → review analyses → return metrics.
+
+    Args:
+        program_path: Path to prompt-builder function (initial.py or evolved version)
+        results_dir: Directory to save evaluation results
+        llm_analyst: Optional analyst LLM config (defaults to local Ollama)
+        llm_reviewer: Optional reviewer LLM config (defaults to local Ollama)
+
+    Returns:
+        Tuple of (metrics dict, success flag, error message)
+    """
     print(f"Evaluating program: {program_path}")
     print(f"Saving results to: {results_dir}")
     os.makedirs(results_dir, exist_ok=True)

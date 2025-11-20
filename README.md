@@ -138,9 +138,9 @@ These structures act as a simple ontology for the task: they define what a scena
 
 The prompt-builder function is responsible for turning the structured data into a text prompt to guide the analyst LLM, which is a more capable model than the coder LLM, to produce natural-language analysis specific to the scenario.
 
-## Reviwer LLM
+## Reviewer LLM
 
-The reviewer LLM evaluates the quality and correctness of the analyst’s output. It receives:
+The reviewer LLM evaluates the quality and correctness of the analyst's output. It receives:
 - the system message defining evaluation criteria,
 - the full scenario description (structured data rendered as text),
 - the analyst LLM’s analysis, and

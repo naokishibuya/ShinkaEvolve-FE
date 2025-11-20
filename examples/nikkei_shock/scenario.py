@@ -1,4 +1,8 @@
-""" Load scenarios.yaml → normalized dicts + YAML strings """
+"""Load scenarios.yaml → normalized dicts + YAML strings.
+
+This module handles loading and parsing of portfolio scenarios from YAML
+configuration files, including instrument normalization and Greek computation.
+"""
 import yaml
 import numpy as np
 from pathlib import Path
@@ -6,7 +10,14 @@ from quant_types import Scenario, Instrument, Greeks, RiskStats
 
 
 def load_scenarios(path: str | Path | None = None) -> tuple[list[Scenario], RiskStats]:
-    """ Load scenarios and risk stats from YAML file. """
+    """Load scenarios and risk stats from YAML file.
+
+    Args:
+        path: Path to scenarios.yaml file (defaults to same directory)
+
+    Returns:
+        Tuple of (list of scenarios, risk statistics)
+    """
     path = Path(path or Path(__file__).parent / "scenarios.yaml")
     data = yaml.safe_load(path.read_text())
 
@@ -30,7 +41,15 @@ def load_scenarios(path: str | Path | None = None) -> tuple[list[Scenario], Risk
     return scenarios, stats
 
 
-def normalize_instrument(d):
+def normalize_instrument(d: dict) -> Instrument:
+    """Convert raw YAML dict to Instrument dataclass.
+
+    Args:
+        d: Dictionary with instrument fields from YAML
+
+    Returns:
+        Instrument with normalized field types
+    """
     return Instrument(
         name=d["name"],
         mtm_value=float(d["mtm_value"]),
@@ -43,7 +62,15 @@ def normalize_instrument(d):
 
 
 def compute_greeks(exposure: list[Instrument], hedge: list[Instrument]) -> Greeks:
-    # Compute Greeks for exposure and hedge portfolios
+    """Compute aggregate Greeks for combined exposure and hedge portfolios.
+
+    Args:
+        exposure: List of exposure instruments
+        hedge: List of hedge instruments
+
+    Returns:
+        Greeks representing total portfolio sensitivities
+    """
     instruments = exposure + hedge
     delta = sum(inst.mtm_value * inst.eq_linear  for inst in instruments)
     gamma = sum(inst.mtm_value * inst.eq_quad    for inst in instruments)
@@ -60,7 +87,15 @@ def compute_greeks(exposure: list[Instrument], hedge: list[Instrument]) -> Greek
     )
 
 
-def load_stats(cfg):
+def load_stats(cfg: dict) -> RiskStats:
+    """Parse risk statistics from YAML config dict.
+
+    Args:
+        cfg: Dictionary with stats configuration from YAML
+
+    Returns:
+        RiskStats with validated volatilities and correlations
+    """
     eq_vol     = float(cfg["eq_vol"])
     vol_of_vol = float(cfg["vol_of_vol"])
     fx_vol     = float(cfg["fx_vol"])
