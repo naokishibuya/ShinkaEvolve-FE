@@ -26,8 +26,6 @@ print(f"Patch: {best['patch_name']}")
 print(f"\nFeedback:\n{best['text_feedback']}")
 
 # Visualize
-fig1, ax1 = plot_improvement(df)
-plt.show(block=False)
-
-fig2, ax2 = plot_lineage_tree(df)
+fig, ax = plt.subplots(figsize=(12, 8))
+plot_improvement(df, fig=fig, ax=ax)
 plt.show()
