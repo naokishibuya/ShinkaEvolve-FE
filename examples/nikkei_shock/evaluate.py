@@ -3,7 +3,7 @@ import os
 from typing import Any
 from scenario import load_scenarios
 from quant_utils import optimize_worst_case_shock
-from examples.nikkei_shock.reviewer import generate_feedback
+from examples.nikkei_shock.review import generate_feedback
 from shinka.core import run_shinka_eval
 from shinka.llm import LLMClient
 
@@ -13,6 +13,7 @@ def main(
     results_dir: str,
     llm_analyst: dict[str, Any] | None = None,
     llm_reviewer: dict[str, Any] | None = None,
+    llm_summarizer: dict[str, Any] | None = None,
 ) -> tuple[dict, bool, str]:
     """Orchestrate evaluation of prompt-builder function.
 
@@ -24,6 +25,9 @@ def main(
         results_dir: Directory to save evaluation results
         llm_analyst: Optional analyst LLM config (defaults to local Ollama)
         llm_reviewer: Optional reviewer LLM config (defaults to local Ollama)
+        llm_summarizer: Optional summarizer LLM config for difficulty weighting
+                       (defaults to llm_reviewer). For faster local testing, use a
+                       lighter model like {"model_names": "ollama::qwen2.5:3b"}
 
     Returns:
         Tuple of (metrics dict, success flag, error message)
@@ -43,7 +47,9 @@ def main(
         shock        = shock_list[run_idx]
         factor_moves = factor_moves_list[run_idx]
         pnl_summary  = pnl_summary_list[run_idx]
-        print(f"Run {run_idx+1}: scenario={scenario.name}")
+        print("-" * 50)
+        print(f"Run {run_idx+1}/{num_runs}")
+        print(f"  scenario={scenario.name}")
         print(f"  shock={shock}")
         print(f"  factor_moves={factor_moves}")
         print(f"  pnl_summary={pnl_summary}")
@@ -71,23 +77,21 @@ def main(
             "verbose": True,
         }
 
-    llm_analyst = LLMClient(**llm_analyst)
-
     if llm_reviewer is None:
-        llm_reviewer = {
-            "model_names": "ollama::llama3.1:8b",
-            "temperatures": 0.0,
-            "max_tokens": 4096,
-            "reasoning_efforts": "low",
-            "verbose": True,
-        }
+        llm_reviewer = llm_analyst
 
+    if llm_summarizer is None:
+        llm_summarizer = llm_reviewer
+
+    llm_analyst = LLMClient(**llm_analyst)
     llm_reviewer = LLMClient(**llm_reviewer)
+    llm_summarizer = LLMClient(**llm_summarizer)
 
     def aggregate_metrics_fn(prompt_list: list[str]) -> dict:
         # Invoke analyst LLM for each prompt to generate analyses
         analysis_list = []
         for i, prompt in enumerate(prompt_list):
+            print("-" * 50)
             print(f"Generating analysis {i+1}/{len(prompt_list)} with analyst LLM...")
             response = llm_analyst.query(
                 msg=prompt,
@@ -100,6 +104,7 @@ def main(
                 ),
                 llm_kwargs=llm_analyst.get_kwargs(),
             )
+            print(response.content)
             analysis_list.append(response.content)
 
         # Now evaluate the analyses with reviewer LLM
@@ -111,7 +116,9 @@ def main(
             pnl_summary_list=pnl_summary_list,
             prompt_list=prompt_list,
             analysis_list=analysis_list,
-            llm_reviewer=llm_reviewer)
+            llm_reviewer=llm_reviewer,
+            llm_summarizer=llm_summarizer,
+            results_dir=results_dir)
 
     metrics, correct, error = run_shinka_eval(
         program_path=program_path,

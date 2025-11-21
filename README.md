@@ -1,9 +1,9 @@
 # ShinkaEvolve-FE (Financial Engineering)
 
 ShinkaEvolve-FE is a Proof-of-Concept financial risk-analysis system built on top of
-[SakanaAI’s ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve). It demonstrates how Shinka can evolve a reusable prompt-building function that automatically generates consistent, scenario-specific hedge-weakness analysis using LLMs. The system does not replace pricing or optimisation. Instead, it automates the natural-language analysis that normally follows quantitative stress results.
+[SakanaAI’s ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve). It demonstrates how Shinka can evolve a reusable prompt-building function that automatically generates consistent, scenario-specific hedge-weakness analysis using LLMs. The system does not replace pricing or optimization. Instead, it automates the natural-language analysis that normally follows quantitative stress results.
 
-In this POC, a simple Greek-based optimisation model produces worst-case multi-factor crisis shocks under realistic per-factor sigma limits. Shinka consumes these quantitative outputs and produces structured prompts that guide an LLM to explain why the stress scenario is harmful, how hedges behave under crisis correlations, and which risk factors dominate the loss.
+In this POC, a simple Greek-based optimization model produces worst-case multi-factor crisis shocks under realistic per-factor sigma limits. Shinka consumes these quantitative outputs and produces structured prompts that guide an LLM to explain why the stress scenario is harmful, how hedges behave under crisis correlations, and which risk factors dominate the loss.
 
 The quality of each analysis is then evaluated by a separate reviewer LLM, which scores the output and provides feedback. These scores serve as the fitness signal for Shinka’s evolution process, allowing the prompt-building function to improve over generations.
 
@@ -28,7 +28,7 @@ The aim is to support analysts by producing clear, scenario-specific commentary 
 What this POC **does**:
 
 - uses a simple stress-testing model,
-- separates optimisation from analysis,
+- separates optimization from analysis,
 - evolves stable prompt-building logic,
 - demonstrates how LLMs can assist in financial risk reporting.
 
@@ -42,17 +42,17 @@ The architecture is intentionally minimal but extensible.
 
 # Architecture Overview
 
-The system consists of four roles:
+The system consists of five roles:
 
 1. **Quant Optimizer**
 
-    A simple Greek-based model combined with a standard numerical optimizer (for example, SQP or Nelder–Mead) is used to find factor shocks within a chosen sigma threshold (e.g., ±3σ per factor) that approximately maximise portfolio loss.
+    A simple Greek-based model combined with COBYLA (Constrained Optimization BY Linear Approximation) is used to find factor shocks within per-factor sigma bounds (e.g., ±3σ) and a joint sigma constraint that approximately maximise portfolio loss.
 
     Output includes:
     - factor shocks in sigma units,
     - P&L,
     - loss ratio,
-    - a crisis severity measure (e.g., Mahalanobis distance).
+    - joint sigma (Mahalanobis distance measuring crisis severity).
 
 2. **Shinka Prompt-Builder Function**.
 
@@ -79,9 +79,16 @@ The system consists of four roles:
     - cross-asset crisis reasoning,
     - clarity and structure.
 
-    Reviewer feedback drives Shinka’s evolution loop.
+    The reviewer provides both numerical scores and textual feedback for each scenario.
 
-The optimisation and pricing remain deterministic; only the narrative layer is evolved.
+5. **Summarizer LLM**
+
+    The summarizer LLM:
+    - assesses relative difficulty across all scenarios based on complexity factors,
+    - produces difficulty weights without seeing individual scores (to prevent bias),
+    - computes the final difficulty-weighted fitness score that drives evolution.
+
+The optimization and pricing remain deterministic; only the narrative layer is evolved.
 
 > This setup is loosely reminiscent of an actor–critic pattern. The prompt-builder function is the component being optimised (“actor”), because it determines what prompt the analyst LLM receives. The reviewer LLM acts as the “critic,” providing structured feedback that guides the evolution of the prompt-builder over generations. However, analogy breaks since only the prompt-builder code evolves; both LLMs remain fixed.
 >
@@ -101,25 +108,21 @@ A numerical optimizer solves:
 
 ```
     maximize   L(r)
-    subject to -3 ≤ r_i ≤ 3
+    subject to -3 ≤ r_i ≤ 3              (per-factor bounds)
+               √(r^T Σ^(-1) r) ≤ 4       (joint sigma constraint)
 ```
 
 where:
 
-- $r$ is the vector of individual factor shocks in sigma units  
+- $r$ is the vector of individual factor shocks in sigma units
   (e.g., $r = [r_{\text{eq}}, r_{\text{vol}}, r_{\text{fx}}, r_{\text{ir}}]$),
 - $r_i$ is the shock applied to each factor $i$,
-- $L(r)$ is the portfolio P&L under the Greek-based approximation.
+- $L(r)$ is the portfolio P&L under the Greek-based approximation,
+- $\Sigma$ is the crisis correlation matrix.
 
-The optimiser's output is treated as ground truth for Shinka’s analysis.
+The optimizer's output is treated as ground truth for Shinka's analysis.
 
-A separate crisis-severity measure, based on [Mahalanobis distance](https://en.wikipedia.org/wiki/Mahalanobis_distance) and refered to here as **joint sigma**, quantifies how extreme the combined shock configuration is under the assumed covariance. Given the factor shocks $r$ and the covariance matrix $\Sigma$, the joint sigma is computed as:
-
-$$
-\text{joint\_sigma}(r) = \sqrt{r^\top \Sigma^{-1} r}.
-$$
-
-Joint sigma provides an optional sense of how crisis-like the shock configuration is under the specified covariance structure.
+The **joint sigma** constraint, based on [Mahalanobis distance](https://en.wikipedia.org/wiki/Mahalanobis_distance), limits how extreme the combined shock configuration can be under the assumed crisis covariance structure. It prevents unrealistic combinations of simultaneous extreme moves across all factors while still allowing diverse crisis scenarios.
 
 ## Coder LLM, Prompt Builder and Scenario Ontology
 
@@ -180,6 +183,10 @@ PORTFOLIO P&L (JPY Billions)
 
 The reviewer checks whether the analysis is numerically consistent with the scenario data and provides both a score and textual feedback. This feedback is used by Shinka to improve the prompt-builder over generations.
 
+### Summarizer LLM & Difficulty-Weighted Scoring
+
+The final fitness score uses difficulty-weighted averaging across scenarios, where scenario difficulty is automatically assessed by a summarizer LLM based on complexity factors (non-linear exposures, multi-factor interactions, cross-asset effects, hedge complexity). Individual scores are masked from the summarizer to ensure weights reflect true scenario complexity rather than performance, preventing the system from gaming easier scenarios. This approach ensures the evolution process prioritizes improvements on the most challenging and instructive stress tests.
+
 ## Evolution Loop (Summary)
 
 The prompt-builder function (stored in examples/nikkei_shock/initial.py) is the component evolved by Shinka. It receives the scenario and quantitative outputs in structured form and assembles the text prompt for the analyst LLM.
@@ -190,10 +197,11 @@ During evolution:
 2. Each version generates prompts for each scenario.
 3. The analyst LLM produces written analyses.
 4. The reviewer LLM evaluates the analyses for correctness and clarity.
-5. Reviewer feedback serves as the fitness signal (score) for Shinka and text feedback for the coder LLM.
-6. Shinka selects and refines prompt-builders over several generations.
+5. The summarizer LLM assesses scenario difficulty and computes the difficulty-weighted fitness score.
+6. This weighted score serves as the fitness signal for Shinka; text feedback guides the coder LLM.
+7. Shinka selects and refines prompt-builders over several generations.
 
-The coder, analyst and reviewer LLMs remain fixed; only the prompt-building logic evolves. The final product is a reusable prompt-builder that consistently produces high-quality, scenario-specific analysis prompts.
+The coder, analyst, reviewer, and summarizer LLMs remain fixed; only the prompt-building logic evolves. The final product is a reusable prompt-builder that consistently produces high-quality, scenario-specific analysis prompts.
 
 # Technical Details
 
@@ -207,8 +215,8 @@ examples/
 └── nikkei_shock/
     ├── scenarios.yaml          # Portfolio definitions and crisis statistics
     ├── initial.py              # Stub of the prompt-builder function
-    ├── evaluate.py             # Orchestrates optimisation, analysis, and reviewing
-    ├── feedback.py             # Reviewer LLM instructions and scoring helper
+    ├── evaluate.py             # Orchestrates optimization, analysis, and reviewing
+    ├── review.py               # Reviewer LLM instructions and scoring helper
     ├── quant_utils.py          # Quantitative models and optimizer
     └── scenario.py             # Dataclasses and YAML loading
 
@@ -247,9 +255,11 @@ If you want to run models locally using [Ollama](https://ollama.ai/), install Ol
 ```bash
 curl https://ollama.ai/install.sh | sh
 
+ollama pull llama3.1:8b
 ollama pull codellama:7b
 ollama pull qwen2.5-coder:7b
-ollama pull llama3.1:8b
+ollama pull qwen2.5:3b
+ollama pull deepseek-coder:6.7b
 ollama pull nomic-embed-text
 ```
 
