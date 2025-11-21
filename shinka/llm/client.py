@@ -2,6 +2,7 @@ from typing import Any, Tuple
 import os
 import anthropic
 import openai
+import ollama
 import instructor
 from pathlib import Path
 from dotenv import load_dotenv
@@ -78,6 +79,13 @@ def get_client_llm(model_name: str, structured_output: bool = False) -> Tuple[An
                 client,
                 mode=instructor.Mode.GEMINI_JSON,
             )
+    elif model_name.startswith("ollama::"):
+        if structured_output:
+            raise ValueError("Structured output not supported for Ollama models.")
+        client = ollama.Client(
+            host=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            timeout=float(os.getenv("OLLAMA_TIMEOUT", "120")),
+        )
     else:
         raise ValueError(f"Model {model_name} not supported.")
 

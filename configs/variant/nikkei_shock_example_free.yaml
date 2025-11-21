@@ -1,0 +1,22 @@
+defaults:
+  - override /database@_global_: island_single
+  - override /evolution@_global_: zero_budget
+  - override /task@_global_: nikkei_shock
+  - override /cluster@_global_: local
+  - _self_
+
+evaluate_function:
+  llm_analyst:
+    model_names: "ollama::llama3.1:8b"
+    temperatures: 0.0
+    verbose: true
+  llm_reviewer:
+    model_names: "ollama::qwen2.5:3b"
+    temperatures: 0.0
+    verbose: true
+  llm_summarizer:
+    model_names: "ollama::qwen2.5:3b"
+    temperatures: 0.0
+    verbose: true
+
+variant_suffix: "_example_free"

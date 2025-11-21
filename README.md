@@ -1,317 +1,301 @@
-<h1 align="center">
-  <a href="shinka/favicon.png?raw=true"><img src="shinka/favicon.png?raw=true" width="180" /></a><br>
-  <b><code>ShinkaEvolve</code>: Towards Open-Ended and Sample-Efficient Program Evolution 🧬</b><br>
-</h1>
+# ShinkaEvolve-FE (Financial Engineering)
 
-<p align="center">
-  <img src="https://img.shields.io/badge/python-%3E%3D3.10-blue" />
-  <a href="https://github.com/SakanaAI/ShinkaEvolve/blob/master/LICENSE.md"><img src="https://img.shields.io/badge/license-Apache2.0-blue.svg" /></a>
-  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" /></a>
-  <a href="http://arxiv.org/abs/2509.19349"><img src="http://img.shields.io/badge/paper-arxiv.2509.19349-B31B1B.svg" /></a>
-  <a href="https://colab.research.google.com/github/SakanaAI/ShinkaEvolve/blob/main/examples/shinka_tutorial.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" /></a>
-</p>
+ShinkaEvolve-FE is a Proof-of-Concept financial risk-analysis system built on top of
+[SakanaAI’s ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve). It demonstrates how Shinka can evolve a reusable prompt-building function that automatically generates consistent, scenario-specific hedge-weakness analysis using LLMs. The system does not replace pricing or optimization. Instead, it automates the natural-language analysis that normally follows quantitative stress results.
 
+In this POC, a simple Greek-based optimization model produces worst-case multi-factor crisis shocks under realistic per-factor sigma limits. Shinka consumes these quantitative outputs and produces structured prompts that guide an LLM to explain why the stress scenario is harmful, how hedges behave under crisis correlations, and which risk factors dominate the loss.
 
-[`ShinkaEvolve`](https://arxiv.org/abs/2509.19349) is a framework that combines Large Language Models (LLMs) with evolutionary algorithms to drive scientific discovery. By leveraging the creative capabilities of LLMs and the optimization power of evolutionary search, `ShinkaEvolve` enables automated exploration and improvement of scientific code. The system is inspired by the [AI Scientist](https://sakana.ai/ai-scientist/), [AlphaEvolve](https://deepmind.google/discover/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/) and the [Darwin Goedel Machine](https://sakana.ai/dgm/): It maintains a population of programs that evolve over generations, with an ensemble of LLMs acting as intelligent mutation operators that suggest code improvements.
+The quality of each analysis is then evaluated by a separate reviewer LLM, which scores the output and provides feedback. These scores serve as the fitness signal for Shinka’s evolution process, allowing the prompt-building function to improve over generations.
 
-The framework supports **parallel evaluation of candidates** locally or on a Slurm cluster. It maintains an archive of successful solutions, enabling knowledge transfer between different evolutionary islands. `ShinkaEvolve` is particularly well-suited for scientific tasks where there is a verifier available and the goal is to optimize performance metrics while maintaining code correctness and readability.
+This illustrates a practical separation of responsibilities:
+quantitative models compute the scenario, and Shinka automates and iteratively improves the explanatory analysis layer.
 
-![](docs/conceptual.png)
+## Motivation
 
-## Documentation 📝
+Stress tests often reveal losses driven by:
 
-| Guide | Description | What You'll Learn |
-|-------|-------------|-------------------|
-| 🚀 **[Getting Started](docs/getting_started.md)** | Installation, basic usage, and examples | Setup, first evolution run, core concepts |
-| 📓 **[Tutorial Notebook](examples/shinka_tutorial.ipynb)** | Interactive walkthrough of Shinka features | Hands-on examples, configuration, best practices |
-| ⚙️ **[Configuration](docs/configuration.md)** | Comprehensive configuration reference | All config options, optimization settings, advanced features |
-| 🎨 **[WebUI](docs/webui.md)** | Interactive visualization and monitoring | Real-time tracking, result analysis, debugging tools | 
-|🕹️ **[Local LLM Support](https://github.com/SakanaAI/ShinkaEvolve/blob/main/docs/support_local_llm.md)**| Instructions for Local LLMs | How to setup local LLMs on your machine|
+- nonlinear exposures (gamma, vega),
+- stressed correlation dynamics,
+- basis risk (imperfect hedge alignment),
+- cross-asset feedback effects.
 
-## Installation & Quick Start 🚀
+Modern LLMs offer strong natural-language capabilities that can complement quantitative stress-testing outputs. This POC combines a simple quantitative model with LLM-generated analysis: the model produces worst-case shocks and P&L, and Shinka constructs prompts that guide an LLM to explain the resulting hedge behaviour and loss drivers.
+
+The aim is to support analysts by producing clear, scenario-specific commentary directly from quantitative results. Keeping the numerical stress model and the analysis layer separate allows the same architecture to be used with more complex pricing engines and existing risk-analysis systems, without requiring major changes to their existing workflows.
+
+## Project Scope
+
+What this POC **does**:
+
+- uses a simple stress-testing model,
+- separates optimization from analysis,
+- evolves stable prompt-building logic,
+- demonstrates how LLMs can assist in financial risk reporting.
+
+What it does **NOT** do:
+
+- price complex nonlinear instruments,
+- implement a full production risk engine,
+- claim to replace quantitative modelling.
+
+The architecture is intentionally minimal but extensible.
+
+# Architecture Overview
+
+The system consists of five roles:
+
+1. **Quant Optimizer**
+
+    A simple Greek-based model combined with COBYLA (Constrained Optimization BY Linear Approximation) is used to find factor shocks within per-factor sigma bounds (e.g., ±3σ) and a joint sigma constraint that approximately maximise portfolio loss.
+
+    Output includes:
+    - factor shocks in sigma units,
+    - P&L,
+    - loss ratio,
+    - joint sigma (Mahalanobis distance measuring crisis severity).
+
+2. **Shinka Prompt-Builder Function**.
+
+    Shinka evolves a Python function that:
+    - reads exposures, hedges, Greeks, and crisis statistics,
+    - reads optimized factor shocks and P&L,
+    - constructs a clean, structured prompt for the analyst LLM.  
+
+    This function is refined over Shinka’s evolution loop.
+
+3. **Analyst LLM**
+
+    The analyst LLM:
+    - receives the prompt and produces the natural-language hedge-weakness analysis,
+    - is not limited to predefined templates or rule-based boilerplate,
+    - adapts the explanation to the specific portfolio, shocks, and crisis dynamics in each scenario.
+
+4. **Reviewer LLM**
+
+    The reviewer LLM evaluates the analysis across several dimensions:
+    - correct identification of exposures,
+    - hedge-intent interpretation,
+    - consistency with the scenario data,
+    - cross-asset crisis reasoning,
+    - clarity and structure.
+
+    The reviewer provides both numerical scores and textual feedback for each scenario.
+
+5. **Summarizer LLM**
+
+    The summarizer LLM:
+    - assesses relative difficulty across all scenarios based on complexity factors,
+    - produces difficulty weights without seeing individual scores (to prevent bias),
+    - computes the final difficulty-weighted fitness score that drives evolution.
+
+The optimization and pricing remain deterministic; only the narrative layer is evolved.
+
+> This setup is loosely reminiscent of an actor–critic pattern. The prompt-builder function is the component being optimised (“actor”), because it determines what prompt the analyst LLM receives. The reviewer LLM acts as the “critic,” providing structured feedback that guides the evolution of the prompt-builder over generations. However, analogy breaks since only the prompt-builder code evolves; both LLMs remain fixed.
+>
+> The evolution process also has a student–teacher character. The coder LLM (a smaller model) performs the mutations, while the reviewer LLM (typically a larger, more capable model) provides higher-quality feedback. This resembles a teacher supervising a student’s improvements, though no model distillation occurs—only the prompt-builder function is refined.
+
+## Quantitative Stress Scenario
+
+The quantitative model is deliberately simple:
+
+- Four crisis factors: equity, vol-of-vol, FX (USDJPY), and rates.
+- Crisis volatility and correlation from YAML configuration.
+- Factor bounds (e.g., ±3σ).
+- 10-day horizon scaling using sqrt(T).
+- Linear + quadratic P&L approximation from aggregated Greeks.
+
+A numerical optimizer solves:
+
+```
+    maximize   L(r)
+    subject to -3 ≤ r_i ≤ 3              (per-factor bounds)
+               √(r^T Σ^(-1) r) ≤ 4       (joint sigma constraint)
+```
+
+where:
+
+- $r$ is the vector of individual factor shocks in sigma units
+  (e.g., $r = [r_{\text{eq}}, r_{\text{vol}}, r_{\text{fx}}, r_{\text{ir}}]$),
+- $r_i$ is the shock applied to each factor $i$,
+- $L(r)$ is the portfolio P&L under the Greek-based approximation,
+- $\Sigma$ is the crisis correlation matrix.
+
+The optimizer's output is treated as ground truth for Shinka's analysis.
+
+The **joint sigma** constraint, based on [Mahalanobis distance](https://en.wikipedia.org/wiki/Mahalanobis_distance), limits how extreme the combined shock configuration can be under the assumed crisis covariance structure. It prevents unrealistic combinations of simultaneous extreme moves across all factors while still allowing diverse crisis scenarios.
+
+## Coder LLM, Prompt Builder and Scenario Ontology
+
+The coder LLM receives the instruction messages to write the prompt-builder function. This function organises the scenario data and quantitative outputs into a text prompt for the analyst LLM.
+
+The prompt-builder function does not parse free-form text. Instead, it receives the scenario and quantitative outputs in structured form (mostly dataclasses), for example:
+
+- scenario metadata (name, description),
+- exposure and hedge instruments,
+- net Greeks,
+- crisis statistics (volatility, correlation, horizon),
+- optimised factor shocks,
+- P&L metrics (loss in JPY, loss ratio, joint sigma).
+
+These structures act as a simple ontology for the task: they define what a scenario is, what an instrument is, and how shocks and P&L are represented.
+
+The prompt-builder function is responsible for turning the structured data into a text prompt to guide the analyst LLM, which is a more capable model than the coder LLM, to produce natural-language analysis specific to the scenario.
+
+## Reviewer LLM
+
+The reviewer LLM evaluates the quality and correctness of the analyst's output. It receives:
+- the system message defining evaluation criteria,
+- the full scenario description (structured data rendered as text),
+- the analyst LLM’s analysis, and
+- a small quantitative summary block (shocks, P&L, loss ratio, joint sigma).
+
+```
+SHOCK PARAMETERS (Optimizer Output)
+------------------------------------
+  Equity shock:         -2.80 σ
+  Vol shock:            +2.50 σ
+  FX shock (USDJPY):    +2.70 σ
+  IR shock:             +0.30 σ
+  Joint sigma:           4.12   (Mahalanobis distance)
+
+FACTOR MOVES (After Volatility & √T Scaling)
+---------------------------------------------
+  Equity move:         -8.9400%
+  Vol move:            +7.9057%
+  FX move:             +6.0750%
+  IR move:             +0.1423%
+
+PORTFOLIO P&L (JPY Billions)
+-----------------------------
+  Net Total P&L:        -12.34 bn
+    └─ Exposure P&L:    -45.67 bn
+    └─ Hedge P&L:       +33.33 bn
+
+  Net P&L by Factor:
+    • Equity:           -8.50 bn
+    • Vol:              -2.30 bn
+    • FX:               -1.20 bn
+    • Rates:            -0.34 bn
+
+  Loss:                 12.34 bn
+  Loss Ratio:           12.34% (vs exposure notional)
+```
+
+The reviewer checks whether the analysis is numerically consistent with the scenario data and provides both a score and textual feedback. This feedback is used by Shinka to improve the prompt-builder over generations.
+
+### Summarizer LLM & Difficulty-Weighted Scoring
+
+The final fitness score uses difficulty-weighted averaging across scenarios, where scenario difficulty is automatically assessed by a summarizer LLM based on complexity factors (non-linear exposures, multi-factor interactions, cross-asset effects, hedge complexity). Individual scores are masked from the summarizer to ensure weights reflect true scenario complexity rather than performance, preventing the system from gaming easier scenarios. This approach ensures the evolution process prioritizes improvements on the most challenging and instructive stress tests.
+
+## Evolution Loop (Summary)
+
+The prompt-builder function (stored in examples/nikkei_shock/initial.py) is the component evolved by Shinka. It receives the scenario and quantitative outputs in structured form and assembles the text prompt for the analyst LLM.
+
+During evolution:
+
+1. The coder LLM mutates the prompt-builder code to produce candidate versions.
+2. Each version generates prompts for each scenario.
+3. The analyst LLM produces written analyses.
+4. The reviewer LLM evaluates the analyses for correctness and clarity.
+5. The summarizer LLM assesses scenario difficulty and computes the difficulty-weighted fitness score.
+6. This weighted score serves as the fitness signal for Shinka; text feedback guides the coder LLM.
+7. Shinka selects and refines prompt-builders over several generations.
+
+The coder, analyst, reviewer, and summarizer LLMs remain fixed; only the prompt-building logic evolves. The final product is a reusable prompt-builder that consistently produces high-quality, scenario-specific analysis prompts.
+
+# Technical Details
+
+## Directory Overview
+
+```
+configs/
+└── variant/                    # Evolution configurations (local or cloud setups)
+
+examples/
+└── nikkei_shock/
+    ├── scenarios.yaml          # Portfolio definitions and crisis statistics
+    ├── initial.py              # Stub of the prompt-builder function
+    ├── evaluate.py             # Orchestrates optimization, analysis, and reviewing
+    ├── review.py               # Reviewer LLM instructions and scoring helper
+    ├── quant_utils.py          # Quantitative models and optimizer
+    └── scenario.py             # Dataclasses and YAML loading
+
+shinka/
+└── llm/
+    └── models/
+        └── ollama.py           # Adapter for running LLMs locally via Ollama
+```
+
+## Installation
+
+### 1. Clone repository
 
 ```bash
-# Clone the repository
-git clone https://github.com/SakanaAI/ShinkaEvolve
-# Install uv if you haven't already
+git clone https://github.com/naokishibuya/ShinkaEvolve-FE
+cd ShinkaEvolve-FE
+```
+
+### 2. Create environment using uv
+
+```bash
+# install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create environment and install Shinka
-cd ShinkaEvolve
 uv venv --python 3.11
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 uv pip install -e .
-
-# Run your first evolution experiment
-shinka_launch variant=circle_packing_example
 ```
 
-For detailed installation instructions and usage examples, see the [Getting Started Guide](docs/getting_started.md).
+This installs ShinkaEvolve that supports both local and cloud LLMs.
 
-## Examples 📖
+### 3. Local Ollama models
 
-| Example | Description | Environment Setup |
-|---------|-------------|-------------------|
-| ⭕ [Circle Packing](examples/circle_packing) | Optimize circle packing to maximize radii. | `LocalJobConfig` |
-| 🤖 [Agent Design](examples/adas_aime) | Design agent scaffolds for math tasks. | `LocalJobConfig` |
-| 🎯 [ALE-Bench](examples/ale_bench) | Code optimization for ALE-Bench tasks. | `LocalJobConfig` |
-| ✨ [Novelty Generator](examples/novelty_generator) | Generate creative, surprising outputs (e.g., ASCII art). | `LocalJobConfig` |
-
-
-## `shinka` Run with Python API 🐍
-
-For the simplest setup with default settings, you only need to specify the evaluation program:
-
-```python
-from shinka.core import EvolutionRunner, EvolutionConfig
-from shinka.database import DatabaseConfig
-from shinka.launch import LocalJobConfig
-
-# Minimal config - only specify what's required
-job_config = LocalJobConfig(eval_program_path="evaluate.py")
-db_config = DatabaseConfig()
-evo_config = EvolutionConfig(init_program_path="initial.py",)
-
-# Run evolution with defaults
-runner = EvolutionRunner(
-    evo_config=evo_config,
-    job_config=job_config,
-    db_config=db_config,
-)
-runner.run()
-```
-
-<details>
-<summary><strong>EvolutionConfig Parameters</strong> (click to expand)</summary>
-
-| Key | Default Value | Type | Explanation |
-|-----|---------------|------|-------------|
-| `task_sys_msg` | `None` | `Optional[str]` | System message describing the optimization task |
-| `patch_types` | `["diff"]` | `List[str]` | Types of patches to generate: "diff", "full", "cross" |
-| `patch_type_probs` | `[1.0]` | `List[float]` | Probabilities for each patch type |
-| `num_generations` | `10` | `int` | Number of evolution generations to run |
-| `max_parallel_jobs` | `2` | `int` | Maximum number of parallel evaluation jobs |
-| `max_patch_resamples` | `3` | `int` | Max times to resample a patch if it fails |
-| `max_patch_attempts` | `5` | `int` | Max attempts to generate a valid patch |
-| `job_type` | `"local"` | `str` | Job execution type: "local", "slurm_docker", "slurm_conda" |
-| `language` | `"python"` | `str` | Programming language for evolution |
-| `llm_models` | `["azure-gpt-4.1-mini"]` | `List[str]` | List of LLM models for code generation |
-| `llm_dynamic_selection` | `None` | `Optional[Union[str, BanditBase]]` | Dynamic model selection strategy |
-| `llm_dynamic_selection_kwargs` | `{}` | `dict` | Kwargs for dynamic selection |
-| `llm_kwargs` | `{}` | `dict` | Additional kwargs for LLM calls |
-| `meta_rec_interval` | `None` | `Optional[int]` | Interval for meta-recommendations |
-| `meta_llm_models` | `None` | `Optional[List[str]]` | LLM models for meta-recommendations |
-| `meta_llm_kwargs` | `{}` | `dict` | Kwargs for meta-recommendation LLMs |
-| `meta_max_recommendations` | `5` | `int` | Max number of meta-recommendations |
-| `embedding_model` | `None` | `Optional[str]` | Model for code embeddings |
-| `init_program_path` | `"initial.py"` | `Optional[str]` | Path to initial program to evolve |
-| `results_dir` | `None` | `Optional[str]` | Directory to save results (auto-generated if None) |
-| `max_novelty_attempts` | `3` | `int` | Max attempts for novelty generation |
-| `code_embed_sim_threshold` | `1.0` | `float` | Similarity threshold for code embeddings |
-| `novelty_llm_models` | `None` | `Optional[List[str]]` | LLM models for novelty judgment |
-| `novelty_llm_kwargs` | `{}` | `dict` | Kwargs for novelty LLMs |
-| `use_text_feedback` | `False` | `bool` | Whether to use text feedback in evolution |
-
-</details>
-
-<details>
-<summary><strong>DatabaseConfig Parameters</strong> (click to expand)</summary>
-
-| Key | Default Value | Type | Explanation |
-|-----|---------------|------|-------------|
-| `db_path` | `None` | `Optional[str]` | Database file path (auto-generated if None) |
-| `num_islands` | `4` | `int` | Number of evolution islands for diversity |
-| `archive_size` | `100` | `int` | Size of program archive per island |
-| `elite_selection_ratio` | `0.3` | `float` | Proportion of elite programs for inspiration |
-| `num_archive_inspirations` | `5` | `int` | Number of archive programs to use as inspiration |
-| `num_top_k_inspirations` | `2` | `int` | Number of top-k programs for inspiration |
-| `migration_interval` | `10` | `int` | Generations between island migrations |
-| `migration_rate` | `0.1` | `float` | Proportion of island population to migrate |
-| `island_elitism` | `True` | `bool` | Keep best programs on their original islands |
-| `enforce_island_separation` | `True` | `bool` | Enforce full separation between islands |
-| `parent_selection_strategy` | `"power_law"` | `str` | Parent selection: "weighted", "power_law", "beam_search" |
-| `exploitation_alpha` | `1.0` | `float` | Power-law exponent (0=uniform, 1=power-law) |
-| `exploitation_ratio` | `0.2` | `float` | Chance to pick parent from archive |
-| `parent_selection_lambda` | `10.0` | `float` | Sharpness of sigmoid for weighted selection |
-| `num_beams` | `5` | `int` | Number of beams for beam search selection |
-
-</details>
-
-<details>
-<summary><strong>JobConfig Parameters</strong> (click to expand)</summary>
-
-**LocalJobConfig** (for local execution):
-| Key | Default Value | Type | Explanation |
-|-----|---------------|------|-------------|
-| `eval_program_path` | `"evaluate.py"` | `Optional[str]` | Path to evaluation script |
-| `extra_cmd_args` | `{}` | `Dict[str, Any]` | Additional command line arguments |
-| `time` | `None` | `Optional[str]` | Time limit for job execution |
-| `conda_env` | `None` | `Optional[str]` | Conda environment to run jobs in |
-
-**SlurmDockerJobConfig** (for SLURM with Docker):
-| Key | Default Value | Type | Explanation |
-|-----|---------------|------|-------------|
-| `eval_program_path` | `"evaluate.py"` | `Optional[str]` | Path to evaluation script |
-| `extra_cmd_args` | `{}` | `Dict[str, Any]` | Additional command line arguments |
-| `image` | `"ubuntu:latest"` | `str` | Docker image to use |
-| `image_tar_path` | `None` | `Optional[str]` | Path to Docker image tar file |
-| `docker_flags` | `""` | `str` | Additional Docker flags |
-| `partition` | `"gpu"` | `str` | SLURM partition to use |
-| `time` | `"01:00:00"` | `str` | Job time limit |
-| `cpus` | `1` | `int` | Number of CPUs to request |
-| `gpus` | `1` | `int` | Number of GPUs to request |
-| `mem` | `"8G"` | `Optional[str]` | Memory to request |
-
-**SlurmCondaJobConfig** (for SLURM with Conda):
-| Key | Default Value | Type | Explanation |
-|-----|---------------|------|-------------|
-| `eval_program_path` | `"evaluate.py"` | `Optional[str]` | Path to evaluation script |
-| `extra_cmd_args` | `{}` | `Dict[str, Any]` | Additional command line arguments |
-| `conda_env` | `""` | `str` | Conda environment name |
-| `modules` | `[]` | `Optional[List[str]]` | Environment modules to load |
-| `partition` | `"gpu"` | `str` | SLURM partition to use |
-| `time` | `"01:00:00"` | `str` | Job time limit |
-| `cpus` | `1` | `int` | Number of CPUs to request |
-| `gpus` | `1` | `int` | Number of GPUs to request |
-| `mem` | `"8G"` | `Optional[str]` | Memory to request |
-
-</details>
-
-### Evaluation Setup & Initial Solution 🏃
-
-To use EvolutionRunner, you need two key files: The **`evaluate.py`** script defines how to test and score your programs - it runs multiple evaluations, validates results, and aggregates them into metrics that guide the `shinka` evolution loop. The **`initial.py`** file contains your starting solution with the core algorithm that will be iteratively improved by LLMs across generations.
-
-<table>
-<tr>
-<td width="50%">
-
-**`evaluate.py` - Evaluation Script**
-
-```python
-from shinka.core import run_shinka_eval
-
-def main(program_path: str,
-         results_dir: str):
-    metrics, correct, err = run_shinka_eval(
-        program_path=program_path,
-        results_dir=results_dir,
-        experiment_fn_name="run_experiment",
-        num_runs=3, # Multi-evals to aggreg.
-        get_experiment_kwargs=get_kwargs,
-        aggregate_metrics_fn=aggregate_fn,
-        validate_fn=validate_fn,  # Optional
-    )
-
-def get_kwargs(run_idx: int) -> dict:
-    return {"param1": "value", "param2": 42}
-
-def aggregate_fn(results: list) -> dict:
-    score = results[0]
-    text = results[1]
-    return {
-        "combined_score": float(score),
-        "public": {...},  # shinka-visible
-        "private": {...},  # shinka-invisible
-        "extra_data": {...},  # store as pkl
-        "text_feedback": text,  # str fb
-    }
-
-if __name__ == "__main__":
-    # argparse program path & dir
-    main(program_path, results_dir)
-```
-
-</td>
-<td width="50%">
-
-**`initial.py` - Starting Solution**
-
-```python
-# EVOLVE-BLOCK-START
-def advanced_algo():
-    # This will be evolved
-    return solution
-# EVOLVE-BLOCK-END
-
-def run_experiment(**kwargs):
-    """Main called by evaluator"""
-    result = solve_problem(kwargs)
-    return result
-
-def solve_problem(params):
-    solution = advanced_algo()
-    return solution
-```
-
-**Key Points:**
-- Eval name matches `experiment_fn_name`
-- Use `EVOLVE-BLOCK-START` and `EVOLVE-BLOCK-END` to mark evolution sections
-- Return format matches validation expectations
-- Dependencies must be available in env
-- Results can be unpacked for metrics
-- Auto-stores several results in `results_dir`
-- Can add text feedback in `shinka` loop
-- Higher `combined_score` values indicate better performance (maximization)
-
-</td>
-</tr>
-</table>
-
-
-## `shinka` Launcher with Hydra 🚀
-
-`shinka` Launcher utilizes [Hydra](https://hydra.cc/) to configure and launch evolutionary experiments effortlessly. It supports concise configuration via Hydra's powerful override syntax, making it easy to manage and iterate scientific explorations.
+If you want to run models locally using [Ollama](https://ollama.ai/), install Ollama and pull the required models:
 
 ```bash
-# Run with pre-configured variant
-shinka_launch variant=circle_packing_example
+curl https://ollama.ai/install.sh | sh
 
-# Run with custom parameters
-shinka_launch \
-    task=circle_packing \
-    database=island_large \
-    evolution=small_budget \
-    cluster=local \
-    evo_config.num_generations=20
+ollama pull llama3.1:8b
+ollama pull codellama:7b
+ollama pull qwen2.5-coder:7b
+ollama pull qwen2.5:3b
+ollama pull deepseek-coder:6.7b
+ollama pull nomic-embed-text
 ```
 
-For comprehensive configuration options and advanced usage, see the [Configuration Guide](docs/configuration.md).
+But these models don't perform as well as cloud LLMs like GPT-4.1. It is handy while developing and testing the system locally.
 
+### 4. Cloud providers
 
-## Interactive WebUI 🎨
-
-Monitor your evolution experiments in real-time with Shinka's interactive web interface! The WebUI provides live visualization of the evolutionary process, genealogy trees, and performance metrics.
-
-![WebUI Screenshot](docs/webui.png)
-
-### Quick Start
-
-Launch the WebUI alongside your evolution experiment:
+To use cloud LLMs, export API keys such as:
 
 ```bash
-# Start your evolution experiment
-shinka_launch variant=circle_packing_example
-
-# In another terminal, launch the WebUI
-shinka_visualize --port 8888 --open
+export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
 ```
 
-For detailed WebUI documentation, see the [WebUI Guide](docs/webui.md).
+Or, set them in a `.env` file.
 
-## Related Open-Source Projects 🧑‍🔧
+## Quick Start
 
-- [OpenEvolve](https://github.com/codelion/openevolve): An open-source implementation of AlphaEvolve
-- [LLM4AD](https://github.com/Optima-CityU/llm4ad): A Platform for Algorithm Design with Large Language Model
+### Local-only (free) mode
 
-## Citation ✍️
-
-If you use `ShinkaEvolve` in your research, please cite it as follows:
-
+```bash
+shinka_launch variant=nikkei_shock_example_free
 ```
-@article{lange2025shinka,
-  title={ShinkaEvolve: Towards Open-Ended And Sample-Efficient Program Evolution},
-  author={Lange, Robert Tjarko and Imajuku, Yuki and Cetin, Edoardo},
-  journal={arXiv preprint arXiv:2509.19349},
-  year={2025}
-}
+
+Uses local Ollama models (defined in `configs/variant/nikkei_shock_example_free.yaml`) for testing without incurring cloud costs.
+
+### Cloud-powered mode
+
+```bash
+shinka_launch variant=nikkei_shock_example
 ```
+
+Uses cloud-powered models (defined in `configs/variant/nikkei_shock_example.yaml`) for higher-quality generations.
+
+## License & Credits
+
+Apache 2.0 license (see [LICENSE](LICENSE)). 
+
+Based on [SakanaAI/ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve); please cite their [arXiv paper](https://arxiv.org/abs/2509.19349).

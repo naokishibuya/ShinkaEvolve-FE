@@ -1,0 +1,28 @@
+defaults:
+  - override /database@_global_: island_single
+  - override /evolution@_global_: small_budget
+  - override /task@_global_: nikkei_shock
+  - override /cluster@_global_: local
+  - _self_
+
+evo_config:
+  num_generations: 5
+  llm_models:
+    - "gpt-4.1-mini"
+
+evaluate_function:
+  llm_analyst:
+    model_names: "gpt-4.1"
+    temperatures: 0.0
+    verbose: true
+  llm_reviewer:
+    model_names: "gpt-4.1"
+    temperatures: 0.0
+    verbose: true
+  llm_summarizer:
+    model_names: "gpt-4.1-mini"
+    temperatures: 0.0
+    max_tokens: 2048
+    verbose: true
+
+variant_suffix: "_example"

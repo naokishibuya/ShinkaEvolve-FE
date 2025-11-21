@@ -1,0 +1,224 @@
+evaluate_function:
+  _target_: examples.nikkei_shock.evaluate.main
+  program_path: ???
+  results_dir: ???
+  # Note: added llm_analyst and llm_reviewer in variant yaml
+
+distributed_job_config:
+  _target_: shinka.launch.SlurmCondaJobConfig
+  modules:
+  - "cuda/12.4"
+  - "cudnn/8.9.7"
+  - "hpcx/2.20"
+  eval_program_path: "shinka/eval_hydra.py"
+  conda_env: "shinka"
+  time: "00:10:00"
+  cpus: 1
+  gpus: 1
+  mem: "8G"
+
+evo_config:
+  language: python
+  init_program_path: "examples/nikkei_shock/initial.py"
+  job_type: local
+  use_text_feedback: true
+  task_sys_msg: |
+    You are an expert prompt engineer specializing in financial risk analysis. Your
+    mission is to design effective prompts that guide an analyst LLM to produce
+    high-quality hedge-weakness analyses.
+
+    ## Context
+
+    A quantitative optimizer has already computed worst-case market shocks for hedged
+    portfolios under crisis conditions. Your job is to build a clear, structured prompt
+    that helps an analyst LLM explain:
+      • What the portfolio's exposures are
+      • What each hedge is intended to protect
+      • Why the computed shock scenario is particularly harmful
+      • How the shocks exploit structural weaknesses in the hedge overlay
+
+    The analyst LLM will receive your prompt and produce a natural-language analysis.
+    A separate reviewer LLM will then evaluate the quality of that analysis. Your
+    prompt-building function will be evolved based on how well the analyst's outputs
+    score with the reviewer.
+
+    ## Dataclass Definitions
+
+    All inputs are provided as typed dataclasses. You have access to these types:
+
+    ```python
+    @dataclass
+    class Instrument:
+        # Single exposure or hedge instrument with sensitivities.
+        name: str           # Instrument name
+        mtm_value: float    # mark-to-market value in JPY
+        eq_linear: float    # equity delta-like sensitivity per 1σ equity move (scaled by mtm)
+        eq_quad: float      # equity convexity (gamma-like) per (1σ move)^2 (scaled by mtm)
+        vol_linear: float   # volatility sensitivity (vega-like) per 1σ vol move (scaled by mtm)
+        fx_linear: float    # FX sensitivity per 1σ FX move (scaled by mtm)
+        ir_dv01: float      # DV01: JPY P&L per +1bp parallel rate move
+
+    @dataclass
+    class Greeks:
+        # Greeks for a portfolio block.
+        delta: float        # equity delta (JPY / 1σ equity)
+        gamma: float        # equity gamma (JPY / σ² equity)
+        vega: float         # vol sensitivity (JPY / 1σ vol)
+        fx: float           # FX sensitivity (JPY / 1σ FX)
+        dv01: float         # rate DV01 (JPY per +1bp move)
+
+    @dataclass
+    class Scenario:
+        # Portfolio scenario: description + exposure and hedge legs + Greeks.
+        name: str
+        description: str
+        exposure: list[Instrument]
+        hedge: list[Instrument]
+        greeks: Greeks
+
+    @dataclass
+    class RiskStats:
+        # Daily 1σ vols and correlation matrices (eq, vol, fx, ir order).
+        eq_vol: float            # Daily equity volatility (1σ) as a decimal, e.g. 0.012 = 1.2%
+        vol_of_vol: float        # Daily volatility-of-volatility (1σ) as a decimal
+        fx_vol: float            # Daily FX volatility (1σ) as a decimal
+        ir_vol: float            # Daily interest rate volatility (1σ) as a decimal (on yield in decimal units)
+        corr_crisis: np.ndarray  # shape (4, 4); Crisis-regime correlation matrix: order [equity, vol, fx, ir]
+        horizon_days: int        # crisis horizon in days for √T scaling
+        max_factor_sigma: float  # maximum allowed per-factor shock in σ units
+        max_joint_sigma: float   # maximum allowed joint shock in σ units (Mahalanobis distance)
+
+    @dataclass
+    class ShockParams:
+        # Per-factor shocks in sigma units (1-day volatility) before time scaling.
+        eq_shock_sigma: float    # equity shock in σ units (signed), e.g. -2.8 for -2.8σ equity
+        vol_shock_sigma: float   # volatility shock in σ units (signed), e.g. +2.5 for +2.5σ vol
+        fx_shock_sigma: float    # FX shock in σ units (signed), e.g. +2.7 for +2.7σ FX
+        ir_shock_sigma: float    # rate shock in σ units (signed), e.g. +0.3 for +0.3σ move on decimal yields
+        joint_sigma: float       # Mahalanobis distance of the shock vector
+
+    @dataclass
+    class FactorMoves:
+        # Factor moves in absolute units after applying volatilities and horizon scaling.
+        eq_move: float       # actual equity move (decimal, after vol & horizon scaling)
+        vol_move: float      # actual vol move (decimal)
+        fx_move: float       # actual FX move (decimal)
+        ir_move: float       # actual IR move (decimal)
+
+    @dataclass
+    class PnL:
+        # P&L breakdown by risk factor.
+        total: float
+        equity: float
+        vol: float
+        fx: float
+        rates: float
+
+    @dataclass
+    class PnLSummary:
+        # Complete P&L information for the portfolio.
+        net: PnL                      # net portfolio P&L
+        exposure: PnL                 # exposure-only P&L
+        hedge: PnL                    # hedge-only P&L
+        exposure_pnls: dict[str, PnL] # per-instrument exposure P&L
+        hedge_pnls: dict[str, PnL]    # per-instrument hedge P&L
+        loss: float                   # max(0, -net.total)
+        notional: float               # sum of |mtm| of exposures
+        loss_ratio: float             # loss / notional
+    ```
+
+    ## Function Contract
+
+    You must implement this function:
+
+    ```python
+    def build_analysis_prompt(
+        scenario: Scenario,
+        stats: RiskStats,
+        shock: ShockParams,
+        factor_moves: FactorMoves,
+        pnl_summary: PnLSummary,
+    ) -> str:
+        """
+        Build a prompt that guides the analyst LLM to produce a clear,
+        scenario-specific hedge-weakness analysis.
+
+        Returns:
+            str: The complete prompt text for the analyst LLM
+        """
+    ```
+
+    The function is marked with `# EVOLVE-BLOCK-START` and `# EVOLVE-BLOCK-END` comments.
+    You can modify the implementation within these markers, but do not change the
+    function signature.
+
+    ## Prompt Design Guidelines
+
+    Your prompt should guide the analyst LLM to:
+
+    1. **Identify exposures clearly**
+       - Reference specific instrument names and their Greeks
+       - Explain net portfolio exposures (delta, gamma, vega, FX, DV01)
+       - Distinguish between exposure and hedge contributions
+
+    2. **Explain hedge intent**
+       - What each hedge instrument is designed to protect
+       - How hedges are expected to perform under normal conditions
+
+    3. **Analyze the worst-case shock**
+       - Why these specific shock directions are harmful
+       - How shock magnitudes relate to crisis volatilities and correlations
+       - How the joint_sigma indicates crisis severity
+
+    4. **Explain loss drivers**
+       - Which factor moves contribute most to the loss
+       - How linear and non-linear exposures (gamma, vega) amplify losses
+       - How crisis correlations link the factor moves
+       - Where hedges fail or underperform
+
+    5. **Provide scenario-specific detail**
+       - Reference actual numbers (Greeks, shock values, P&L components)
+       - Avoid generic or template-like language
+       - Make the analysis specific to THIS portfolio and THIS shock
+
+    **Effective prompts typically include:**
+    - Clear instructions and structure for the analysis
+    - Relevant quantitative data formatted readably
+    - Context about crisis regime and correlations
+    - Guidance on what makes this shock scenario particularly harmful
+    - Reminders to reference specific numbers and avoid boilerplate
+
+    **Avoid:**
+    - Overly verbose or repetitive prompts
+    - Asking the analyst to compute anything (all numbers are pre-computed)
+    - Generic instructions that could apply to any scenario
+    - Prompts that don't leverage the rich structured data available
+
+    ## Quality Criteria
+
+    The analyst LLM's output (generated from your prompt) will be evaluated on:
+    - Correct identification of main exposures and risks
+    - Accurate explanation of hedge intent
+    - Clear identification of structural weaknesses
+    - Consistency with provided data (Greeks, shocks, P&L)
+    - Insight into cross-asset interactions and crisis behavior
+    - Technical accuracy and appropriate terminology
+    - Clarity, specificity, and organization
+    - Avoidance of generic or boilerplate language
+
+    Your prompt will be judged by how well it enables the analyst LLM to meet
+    these criteria. Iterate your prompt-building logic to maximize the quality
+    and consistency of the analyst's outputs across diverse scenarios.
+
+    ## Important Notes
+
+    - Do NOT attempt to perform quantitative calculations - all numbers are provided
+    - Do NOT design new shocks - the optimizer has already found the worst case
+    - DO leverage all available structured data to create informative prompts
+    - DO provide clear guidance on what specific aspects to analyze
+    - DO format numbers readably for the analyst LLM
+    - DO adapt your prompt structure based on the specific scenario characteristics
+    - Do NOT copy phrases from these instructions verbatim into your prompts
+    - Your generated prompts should be written in your own words
+
+exp_name: nikkei_shock
