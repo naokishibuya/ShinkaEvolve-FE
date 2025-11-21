@@ -1,0 +1,380 @@
+(ShinkaEvolve-FE) > shinka_launch variant=nikkei_shock_example
+Experiment configurations:
+verbose: false
+results_dir: results
+run_name: 2025.11.21164746
+output_dir: results/nikkei_shock/2025.11.21164746_example
+db_config:
+  _target_: shinka.database.DatabaseConfig
+  db_path: evolution_db.sqlite
+  num_islands: 1
+  archive_size: 20
+  exploitation_ratio: 0.3
+  elite_selection_ratio: 0.4
+  num_archive_inspirations: 4
+  num_top_k_inspirations: 2
+  migration_interval: 10
+  migration_rate: 0.0
+  island_elitism: true
+  parent_selection_strategy: weighted
+  parent_selection_lambda: 10.0
+evo_config:
+  _target_: shinka.core.EvolutionConfig
+  patch_types:
+  - diff
+  - full
+  patch_type_probs:
+  - 0.5
+  - 0.5
+  num_generations: 5
+  max_parallel_jobs: 1
+  max_patch_attempts: 10
+  llm_models:
+  - gpt-4.1-mini
+  llm_dynamic_selection: null
+  embedding_model: text-embedding-3-small
+  results_dir: results/nikkei_shock/2025.11.21164746_example
+  language: python
+  init_program_path: examples/nikkei_shock/initial.py
+  job_type: local
+  use_text_feedback: true
+  task_sys_msg: "You are an expert prompt engineer specializing in financial risk\
+    \ analysis. Your\nmission is to design effective prompts that guide an analyst\
+    \ LLM to produce\nhigh-quality hedge-weakness analyses.\n\n## Context\n\nA quantitative\
+    \ optimizer has already computed worst-case market shocks for hedged\nportfolios\
+    \ under crisis conditions. Your job is to build a clear, structured prompt\nthat\
+    \ helps an analyst LLM explain:\n  • What the portfolio's exposures are\n  • What\
+    \ each hedge is intended to protect\n  • Why the computed shock scenario is particularly\
+    \ harmful\n  • How the shocks exploit structural weaknesses in the hedge overlay\n\
+    \nThe analyst LLM will receive your prompt and produce a natural-language analysis.\n\
+    A separate reviewer LLM will then evaluate the quality of that analysis. Your\n\
+    prompt-building function will be evolved based on how well the analyst's outputs\n\
+    score with the reviewer.\n\n## Dataclass Definitions\n\nAll inputs are provided\
+    \ as typed dataclasses. You have access to these types:\n\n```python\n@dataclass\n\
+    class Instrument:\n    # Single exposure or hedge instrument with sensitivities.\n\
+    \    name: str           # Instrument name\n    mtm_value: float    # mark-to-market\
+    \ value in JPY\n    eq_linear: float    # equity delta-like sensitivity per 1σ\
+    \ equity move (scaled by mtm)\n    eq_quad: float      # equity convexity (gamma-like)\
+    \ per (1σ move)^2 (scaled by mtm)\n    vol_linear: float   # volatility sensitivity\
+    \ (vega-like) per 1σ vol move (scaled by mtm)\n    fx_linear: float    # FX sensitivity\
+    \ per 1σ FX move (scaled by mtm)\n    ir_dv01: float      # DV01: JPY P&L per\
+    \ +1bp parallel rate move\n\n@dataclass\nclass Greeks:\n    # Greeks for a portfolio\
+    \ block.\n    delta: float        # equity delta (JPY / 1σ equity)\n    gamma:\
+    \ float        # equity gamma (JPY / σ² equity)\n    vega: float         # vol\
+    \ sensitivity (JPY / 1σ vol)\n    fx: float           # FX sensitivity (JPY /\
+    \ 1σ FX)\n    dv01: float         # rate DV01 (JPY per +1bp move)\n\n@dataclass\n\
+    class Scenario:\n    # Portfolio scenario: description + exposure and hedge legs\
+    \ + Greeks.\n    name: str\n    description: str\n    exposure: list[Instrument]\n\
+    \    hedge: list[Instrument]\n    greeks: Greeks\n\n@dataclass\nclass RiskStats:\n\
+    \    # Daily 1σ vols and correlation matrices (eq, vol, fx, ir order).\n    eq_vol:\
+    \ float            # Daily equity volatility (1σ) as a decimal, e.g. 0.012 = 1.2%\n\
+    \    vol_of_vol: float        # Daily volatility-of-volatility (1σ) as a decimal\n\
+    \    fx_vol: float            # Daily FX volatility (1σ) as a decimal\n    ir_vol:\
+    \ float            # Daily interest rate volatility (1σ) as a decimal (on yield\
+    \ in decimal units)\n    corr_crisis: np.ndarray  # shape (4, 4); Crisis-regime\
+    \ correlation matrix: order [equity, vol, fx, ir]\n    horizon_days: int     \
+    \   # crisis horizon in days for √T scaling\n    max_factor_sigma: float  # maximum\
+    \ allowed per-factor shock in σ units\n    max_joint_sigma: float   # maximum\
+    \ allowed joint shock in σ units (Mahalanobis distance)\n\n@dataclass\nclass ShockParams:\n\
+    \    # Per-factor shocks in sigma units (1-day volatility) before time scaling.\n\
+    \    eq_shock_sigma: float    # equity shock in σ units (signed), e.g. -2.8 for\
+    \ -2.8σ equity\n    vol_shock_sigma: float   # volatility shock in σ units (signed),\
+    \ e.g. +2.5 for +2.5σ vol\n    fx_shock_sigma: float    # FX shock in σ units\
+    \ (signed), e.g. +2.7 for +2.7σ FX\n    ir_shock_sigma: float    # rate shock\
+    \ in σ units (signed), e.g. +0.3 for +0.3σ move on decimal yields\n    joint_sigma:\
+    \ float       # Mahalanobis distance of the shock vector\n\n@dataclass\nclass\
+    \ FactorMoves:\n    # Factor moves in absolute units after applying volatilities\
+    \ and horizon scaling.\n    eq_move: float       # actual equity move (decimal,\
+    \ after vol & horizon scaling)\n    vol_move: float      # actual vol move (decimal)\n\
+    \    fx_move: float       # actual FX move (decimal)\n    ir_move: float     \
+    \  # actual IR move (decimal)\n\n@dataclass\nclass PnL:\n    # P&L breakdown by\
+    \ risk factor.\n    total: float\n    equity: float\n    vol: float\n    fx: float\n\
+    \    rates: float\n\n@dataclass\nclass PnLSummary:\n    # Complete P&L information\
+    \ for the portfolio.\n    net: PnL                      # net portfolio P&L\n\
+    \    exposure: PnL                 # exposure-only P&L\n    hedge: PnL       \
+    \             # hedge-only P&L\n    exposure_pnls: dict[str, PnL] # per-instrument\
+    \ exposure P&L\n    hedge_pnls: dict[str, PnL]    # per-instrument hedge P&L\n\
+    \    loss: float                   # max(0, -net.total)\n    notional: float \
+    \              # sum of |mtm| of exposures\n    loss_ratio: float            \
+    \ # loss / notional\n```\n\n## Function Contract\n\nYou must implement this function:\n\
+    \n```python\ndef build_analysis_prompt(\n    scenario: Scenario,\n    stats: RiskStats,\n\
+    \    shock: ShockParams,\n    factor_moves: FactorMoves,\n    pnl_summary: PnLSummary,\n\
+    ) -> str:\n    \"\"\"\n    Build a prompt that guides the analyst LLM to produce\
+    \ a clear,\n    scenario-specific hedge-weakness analysis.\n\n    Returns:\n \
+    \       str: The complete prompt text for the analyst LLM\n    \"\"\"\n```\n\n\
+    The function is marked with `# EVOLVE-BLOCK-START` and `# EVOLVE-BLOCK-END` comments.\n\
+    You can modify the implementation within these markers, but do not change the\n\
+    function signature.\n\n## Prompt Design Guidelines\n\nYour prompt should guide\
+    \ the analyst LLM to:\n\n1. **Identify exposures clearly**\n   - Reference specific\
+    \ instrument names and their Greeks\n   - Explain net portfolio exposures (delta,\
+    \ gamma, vega, FX, DV01)\n   - Distinguish between exposure and hedge contributions\n\
+    \n2. **Explain hedge intent**\n   - What each hedge instrument is designed to\
+    \ protect\n   - How hedges are expected to perform under normal conditions\n\n\
+    3. **Analyze the worst-case shock**\n   - Why these specific shock directions\
+    \ are harmful\n   - How shock magnitudes relate to crisis volatilities and correlations\n\
+    \   - How the joint_sigma indicates crisis severity\n\n4. **Explain loss drivers**\n\
+    \   - Which factor moves contribute most to the loss\n   - How linear and non-linear\
+    \ exposures (gamma, vega) amplify losses\n   - How crisis correlations link the\
+    \ factor moves\n   - Where hedges fail or underperform\n\n5. **Provide scenario-specific\
+    \ detail**\n   - Reference actual numbers (Greeks, shock values, P&L components)\n\
+    \   - Avoid generic or template-like language\n   - Make the analysis specific\
+    \ to THIS portfolio and THIS shock\n\n**Effective prompts typically include:**\n\
+    - Clear instructions and structure for the analysis\n- Relevant quantitative data\
+    \ formatted readably\n- Context about crisis regime and correlations\n- Guidance\
+    \ on what makes this shock scenario particularly harmful\n- Reminders to reference\
+    \ specific numbers and avoid boilerplate\n\n**Avoid:**\n- Overly verbose or repetitive\
+    \ prompts\n- Asking the analyst to compute anything (all numbers are pre-computed)\n\
+    - Generic instructions that could apply to any scenario\n- Prompts that don't\
+    \ leverage the rich structured data available\n\n## Quality Criteria\n\nThe analyst\
+    \ LLM's output (generated from your prompt) will be evaluated on:\n- Correct identification\
+    \ of main exposures and risks\n- Accurate explanation of hedge intent\n- Clear\
+    \ identification of structural weaknesses\n- Consistency with provided data (Greeks,\
+    \ shocks, P&L)\n- Insight into cross-asset interactions and crisis behavior\n\
+    - Technical accuracy and appropriate terminology\n- Clarity, specificity, and\
+    \ organization\n- Avoidance of generic or boilerplate language\n\nYour prompt\
+    \ will be judged by how well it enables the analyst LLM to meet\nthese criteria.\
+    \ Iterate your prompt-building logic to maximize the quality\nand consistency\
+    \ of the analyst's outputs across diverse scenarios.\n\n## Important Notes\n\n\
+    - Do NOT attempt to perform quantitative calculations - all numbers are provided\n\
+    - Do NOT design new shocks - the optimizer has already found the worst case\n\
+    - DO leverage all available structured data to create informative prompts\n- DO\
+    \ provide clear guidance on what specific aspects to analyze\n- DO format numbers\
+    \ readably for the analyst LLM\n- DO adapt your prompt structure based on the\
+    \ specific scenario characteristics\n- Do NOT copy phrases from these instructions\
+    \ verbatim into your prompts\n- Your generated prompts should be written in your\
+    \ own words\n"
+evaluate_function:
+  _target_: examples.nikkei_shock.evaluate.main
+  program_path: ???
+  results_dir: ???
+  llm_analyst:
+    model_names: gpt-4.1
+    temperatures: 0.0
+    verbose: true
+  llm_reviewer:
+    model_names: gpt-4.1
+    temperatures: 0.0
+    verbose: true
+  llm_summarizer:
+    model_names: gpt-4.1-mini
+    temperatures: 0.0
+    max_tokens: 2048
+    verbose: true
+distributed_job_config:
+  _target_: shinka.launch.SlurmCondaJobConfig
+  modules:
+  - cuda/12.4
+  - cudnn/8.9.7
+  - hpcx/2.20
+  eval_program_path: shinka/eval_hydra.py
+  conda_env: shinka
+  time: 00:10:00
+  cpus: 1
+  gpus: 1
+  mem: 8G
+exp_name: nikkei_shock
+job_config:
+  _target_: shinka.launch.LocalJobConfig
+  eval_program_path: shinka/eval_hydra.py
+variant_suffix: _example
+
+  @@@@@@@@@@@@@@@@@@@@@      ░██████╗██╗░░██╗██╗███╗░░██╗██╗░░██╗░█████╗░
+  @                   @      ██╔════╝██║░░██║██║████╗░██║██║░██╔╝██╔══██╗
+  @          @        @      ╚█████╗░███████║██║██╔██╗██║█████═╝░███████║
+  @    @@   @@  @@    @      ░╚═══██╗██╔══██║██║██║╚████║██╔═██╗░██╔══██║
+  @   @     @    @@   @      ██████╔╝██║░░██║██║██║░╚███║██║░╚██╗██║░░██║
+  @    @@  @    @     @      ╚═════╝░╚═╝░░╚═╝╚═╝╚═╝░░╚══╝╚═╝░░╚═╝╚═╝░░╚═╝
+  @        @          @      @@@@@@@@@@@@@@@
+  @                   @   @@                 @@@@@
+  @@@@@@@@@@@@@@@@@@@@ @@                       @  @@                 █▀▀
+                      @                          @@  @                ██▄
+                    @      @@                      @  @@
+                   @       @         @              @   @             █░█
+                   @                 @               @  @             ▀▄▀
+                     @@@@@          @     @           @  @
+                      @            @          @       @ @@            █▀█
+                   @@    @@     @@       @@   @        @              █▄█
+                  @@        @@         @     @         @
+                 @@       @@   @@       @@@@@          @        @@    █░░
+              @ @@                @                    @              █▄▄
+             @ @@@@@             @@ @@                 @      @@
+            @                  @       @@              @    @@        █░█
+       @@@@@@@@@@@@@@@@@@@@@@             @@@          @@@@@@@  @@    ▀▄▀
+       @     @         @                      @@         @@@  @@
+        @@               @                      @      @   @  @@      █▀▀
+          @@@@@@@@@@@@@@@@@@                   @    @   @   @@        ██▄
+                                               @  @  @   @
+                                               @  @  @@@@
+                                               @  @@
+
+[2025-11-21 16:47:46,477][shinka.core.runner][INFO] - Experiment configuration saved to results/nikkei_shock/2025.11.21164746_example/experiment_config.yaml
+[2025-11-21 16:47:46,477][shinka.core.runner][INFO] - Starting evolution with 1 parallel jobs, target: 5 generations
+[2025-11-21 16:47:46,477][shinka.core.runner][INFO] - Running generation 0 sequentially to initialize database...
+[2025-11-21 16:51:07,507][httpx][INFO] - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+[2025-11-21 16:51:07,531][shinka.database.dbase][INFO] - Program 34727b2c-3255-4de7-8fa6-39e07ac75c38 added to DB - score: 0.45449438202247194.
+[2025-11-21 16:51:07,532][shinka.database.dbase][INFO] - New best program: 34727b2c-3255-4de7-8fa6-39e07ac75c38 (gen: 0, score: 0.4545, initialized island: 0).
+[2025-11-21 16:51:07,532][shinka.database.dbase][INFO] - Not enough programs with embeddings (1) to perform clustering. Need at least 4.
+                                           Program Evaluation Summary - Gen 0                                           
+╭─────────────┬─────────┬───────────────┬─────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────╮
+│  GenID: 0   │ Island  │    Status     │   Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼─────────┼───────────────┼─────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ Best: 0.454 │   I-0   │   ✓ Correct   │   0.454 │ initial_program                 │ init   │    0.1 │  $0.000 │ 3.3m │
+╰─────────────┴─────────┴───────────────┴─────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────╯
+[2025-11-21 16:51:07,537][shinka.database.dbase][INFO] - Creating copies of initial program 34727b2c-3255-4de7-8fa6-39e07ac75c38 for all islands
+[2025-11-21 16:51:07,538][shinka.database.dbase][INFO] - Database state committed. Last iteration: 0. Best: 34727b2c-3255-4de7-8fa6-39e07ac75c38
+[2025-11-21 16:51:07,546][shinka.core.summarizer][INFO] - Added program 34727b2c-3255-4de7-8fa6-39e07ac75c38 to meta memory tracking (correct=True, total: 1)
+[2025-11-21 16:51:07,552][shinka.core.summarizer][INFO] - Saved meta state to results/nikkei_shock/2025.11.21164746_example/meta_memory.json: 1 unprocessed programs, summary: No, scratchpad: No, recommendations: No, history: 0 items
+[2025-11-21 16:51:07,552][shinka.core.runner][INFO] - Completed generation 0, total: 1/5
+[2025-11-21 16:51:07,552][shinka.core.runner][INFO] - Starting parallel execution for remaining generations...
+[2025-11-21 16:51:07,554][shinka.database.parents][INFO] - Island 0 => Probabilities: [1.0]
+[2025-11-21 16:51:07,554][shinka.database.parents][INFO] - Island 0 => Scores: [0.45449438202247194]
+[2025-11-21 16:51:07,555][shinka.database.parents][INFO] - Sampled parent 34727b2c-3255-4de7-8fa6-39e07ac75c38 (Gen: 0, Score: 0.4545, Children: 0, Island: 0)
+                        Parent & Context Sampling Summary - Gen 1 (Novelty: 1/3, Resample: 1/3)                         
+┏━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━┓
+┃ Role        ┃ Gen  ┃ Island  ┃  ✓/✗  ┃    Score ┃ Patch Name                      ┃ Type   ┃ Compl… ┃    Cost ┃ Time ┃
+┡━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━┩
+│ PARENT      │  0   │   I-0   │   ✓   │    0.454 │ initial_program                 │ init   │    0.1 │  $0.000 │ 3.3m │
+└─────────────┴──────┴─────────┴───────┴──────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────┘
+[2025-11-21 16:51:35,897][httpx][INFO] - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+[2025-11-21 16:51:36,232][httpx][INFO] - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+[2025-11-21 16:51:36,243][shinka.core.novelty_judge][INFO] - Top-5 similarity scores: ['0.74']
+[2025-11-21 16:51:36,243][shinka.core.novelty_judge][INFO] - NOVELTY CHECK 1/3: Accepting program due to low similarity (0.736 <= 1.0)
+[2025-11-21 16:55:30,773][shinka.database.dbase][INFO] - Program 43a94c54-edaa-4e52-a5ca-8aeb830e42f2 added to DB - score: 0.88625.
+[2025-11-21 16:55:30,775][shinka.database.dbase][INFO] - New best program: 43a94c54-edaa-4e52-a5ca-8aeb830e42f2 (gen: 0 → 1, score: 0.4545 → 0.8862, island: 0 → 0)
+[2025-11-21 16:55:30,775][shinka.database.dbase][INFO] - Not enough programs with embeddings (2) to perform clustering. Need at least 4.
+                                           Program Evaluation Summary - Gen 1                                           
+╭─────────────┬─────────┬───────────────┬─────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────╮
+│  GenID: 1   │ Island  │    Status     │   Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼─────────┼───────────────┼─────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ Best: 0.886 │   I-0   │   ✓ Correct   │   0.886 │ none                            │ full   │    0.5 │  $0.008 │ 3.9m │
+╰─────────────┴─────────┴───────────────┴─────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────╯
+[2025-11-21 16:55:30,779][shinka.core.summarizer][INFO] - Added program 43a94c54-edaa-4e52-a5ca-8aeb830e42f2 to meta memory tracking (correct=True, total: 2)
+[2025-11-21 16:55:30,779][shinka.database.dbase][INFO] - Database state committed. Last iteration: 1. Best: 43a94c54-edaa-4e52-a5ca-8aeb830e42f2
+[2025-11-21 16:55:30,800][shinka.core.summarizer][INFO] - Saved meta state to results/nikkei_shock/2025.11.21164746_example/meta_memory.json: 2 unprocessed programs, summary: No, scratchpad: No, recommendations: No, history: 0 items
+[2025-11-21 16:55:30,805][shinka.database.parents][INFO] - Island 0 => Probabilities: [2.2699449604533617e-05, 0.9999773005503955]
+[2025-11-21 16:55:30,805][shinka.database.parents][INFO] - Island 0 => Scores: [0.45449438202247194, 0.88625]
+[2025-11-21 16:55:30,805][shinka.database.parents][INFO] - Sampled parent 43a94c54-edaa-4e52-a5ca-8aeb830e42f2 (Gen: 1, Score: 0.8862, Children: 0, Island: 0)
+[2025-11-21 16:55:30,808][shinka.database.inspirations][INFO] - Sampled 1 archive inspirations: ['34727b2c-3255-4de7-8fa6-39e07ac75c38 (Gen: 0, Score: 0.4545, Island: 0)']
+                        Parent & Context Sampling Summary - Gen 2 (Novelty: 1/3, Resample: 1/3)                         
+┏━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━┓
+┃ Role        ┃ Gen  ┃ Island  ┃  ✓/✗  ┃    Score ┃ Patch Name                      ┃ Type   ┃ Compl… ┃    Cost ┃ Time ┃
+┡━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━┩
+│ PARENT      │  1   │   I-0   │   ✓   │    0.886 │ none                            │ full   │    0.5 │  $0.008 │ 3.9m │
+│ Archive-1   │  0   │   I-0   │   ✓   │    0.454 │ initial_program                 │ init   │    0.1 │  $0.000 │ 3.3m │
+└─────────────┴──────┴─────────┴───────┴──────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────┘
+[2025-11-21 16:55:57,165][httpx][INFO] - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+[2025-11-21 16:55:57,521][httpx][INFO] - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+[2025-11-21 16:55:57,532][shinka.core.novelty_judge][INFO] - Top-5 similarity scores: ['0.99', '0.74']
+[2025-11-21 16:55:57,532][shinka.core.novelty_judge][INFO] - NOVELTY CHECK 1/3: Accepting program due to low similarity (0.987 <= 1.0)
+[2025-11-21 17:01:34,236][shinka.database.dbase][INFO] - Program 474cc6f0-2e0d-4d5e-a24c-95c9e3efaf50 added to DB - score: 0.921304347826087.
+[2025-11-21 17:01:34,238][shinka.database.dbase][INFO] - New best program: 474cc6f0-2e0d-4d5e-a24c-95c9e3efaf50 (gen: 1 → 2, score: 0.8862 → 0.9213, island: 0 → 0)
+[2025-11-21 17:01:34,238][shinka.database.dbase][INFO] - Not enough programs with embeddings (3) to perform clustering. Need at least 4.
+                                           Program Evaluation Summary - Gen 2                                           
+╭─────────────┬─────────┬───────────────┬─────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────╮
+│  GenID: 2   │ Island  │    Status     │   Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼─────────┼───────────────┼─────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ Best: 0.921 │   I-0   │   ✓ Correct   │   0.921 │ none                            │ full   │    0.5 │  $0.014 │ 5.6m │
+╰─────────────┴─────────┴───────────────┴─────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────╯
+[2025-11-21 17:01:34,241][shinka.core.summarizer][INFO] - Added program 474cc6f0-2e0d-4d5e-a24c-95c9e3efaf50 to meta memory tracking (correct=True, total: 3)
+[2025-11-21 17:01:34,242][shinka.database.dbase][INFO] - Database state committed. Last iteration: 2. Best: 474cc6f0-2e0d-4d5e-a24c-95c9e3efaf50
+[2025-11-21 17:01:34,266][shinka.core.summarizer][INFO] - Saved meta state to results/nikkei_shock/2025.11.21164746_example/meta_memory.json: 3 unprocessed programs, summary: No, scratchpad: No, recommendations: No, history: 0 items
+[2025-11-21 17:01:34,272][shinka.database.parents][INFO] - Island 0 => Probabilities: [1.2915544436634662e-54, 0.20000726392280568, 0.7999927360771943]
+[2025-11-21 17:01:34,272][shinka.database.parents][INFO] - Island 0 => Scores: [0.45449438202247194, 0.88625, 0.921304347826087]
+[2025-11-21 17:01:34,272][shinka.database.parents][INFO] - Sampled parent 474cc6f0-2e0d-4d5e-a24c-95c9e3efaf50 (Gen: 2, Score: 0.9213, Children: 0, Island: 0)
+[2025-11-21 17:01:34,276][shinka.database.inspirations][INFO] - Sampled 2 archive inspirations: ['43a94c54-edaa-4e52-a5ca-8aeb830e42f2 (Gen: 1, Score: 0.8862, Island: 0)', '34727b2c-3255-4de7-8fa6-39e07ac75c38 (Gen: 0, Score: 0.4545, Island: 0)']
+                        Parent & Context Sampling Summary - Gen 3 (Novelty: 1/3, Resample: 1/3)                         
+┏━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━┓
+┃ Role        ┃ Gen  ┃ Island  ┃  ✓/✗  ┃    Score ┃ Patch Name                      ┃ Type   ┃ Compl… ┃    Cost ┃ Time ┃
+┡━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━┩
+│ PARENT      │  2   │   I-0   │   ✓   │    0.921 │ none                            │ full   │    0.5 │  $0.014 │ 5.6m │
+│ Archive-1   │  1   │   I-0   │   ✓   │    0.886 │ none                            │ full   │    0.5 │  $0.008 │ 3.9m │
+│ Archive-2   │  0   │   I-0   │   ✓   │    0.454 │ initial_program                 │ init   │    0.1 │  $0.000 │ 3.3m │
+└─────────────┴──────┴─────────┴───────┴──────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────┘
+[2025-11-21 17:02:13,704][httpx][INFO] - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+[2025-11-21 17:02:14,081][httpx][INFO] - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+[2025-11-21 17:02:14,090][shinka.core.novelty_judge][INFO] - Top-5 similarity scores: ['0.99', '0.98', '0.73']
+[2025-11-21 17:02:14,090][shinka.core.novelty_judge][INFO] - NOVELTY CHECK 1/3: Accepting program due to low similarity (0.993 <= 1.0)
+[2025-11-21 17:09:04,915][shinka.database.dbase][INFO] - Program c9879dcd-813b-4111-8c96-7ae1f2056644 added to DB - score: 0.9202247191011236.
+[2025-11-21 17:09:04,918][shinka.database.dbase][INFO] - Recomputing PCA-reduced embedding features for 4 programs.
+[2025-11-21 17:09:06,444][shinka.database.dbase][INFO] - Successfully updated embedding features for 4 programs.
+                                           Program Evaluation Summary - Gen 3                                           
+╭─────────────┬─────────┬───────────────┬─────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────╮
+│  GenID: 3   │ Island  │    Status     │   Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼─────────┼───────────────┼─────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ Best: 0.921 │   I-0   │   ✓ Correct   │   0.920 │ none                            │ full   │    0.5 │  $0.020 │ 6.8m │
+╰─────────────┴─────────┴───────────────┴─────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────╯
+[2025-11-21 17:09:06,450][shinka.core.summarizer][INFO] - Added program c9879dcd-813b-4111-8c96-7ae1f2056644 to meta memory tracking (correct=True, total: 4)
+[2025-11-21 17:09:06,450][shinka.database.dbase][INFO] - Database state committed. Last iteration: 3. Best: 474cc6f0-2e0d-4d5e-a24c-95c9e3efaf50
+[2025-11-21 17:09:06,471][shinka.core.summarizer][INFO] - Saved meta state to results/nikkei_shock/2025.11.21164746_example/meta_memory.json: 4 unprocessed programs, summary: No, scratchpad: No, recommendations: No, history: 0 items
+[2025-11-21 17:09:06,480][shinka.database.parents][INFO] - Island 0 => Probabilities: [2.1467363384223436e-112, 2.059102533993284e-05, 0.3333327824576053, 0.6666466265170548]
+[2025-11-21 17:09:06,480][shinka.database.parents][INFO] - Island 0 => Scores: [0.45449438202247194, 0.88625, 0.921304347826087, 0.9202247191011236]
+[2025-11-21 17:09:06,480][shinka.database.parents][INFO] - Sampled parent c9879dcd-813b-4111-8c96-7ae1f2056644 (Gen: 3, Score: 0.9202, Children: 0, Island: 0)
+[2025-11-21 17:09:06,491][shinka.database.inspirations][INFO] - Sampled 3 archive inspirations: ['474cc6f0-2e0d-4d5e-a24c-95c9e3efaf50 (Gen: 2, Score: 0.9213, Island: 0)', '43a94c54-edaa-4e52-a5ca-8aeb830e42f2 (Gen: 1, Score: 0.8862, Island: 0)', '34727b2c-3255-4de7-8fa6-39e07ac75c38 (Gen: 0, Score: 0.4545, Island: 0)']
+                        Parent & Context Sampling Summary - Gen 4 (Novelty: 1/3, Resample: 1/3)                         
+┏━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━┓
+┃ Role        ┃ Gen  ┃ Island  ┃  ✓/✗  ┃    Score ┃ Patch Name                      ┃ Type   ┃ Compl… ┃    Cost ┃ Time ┃
+┡━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━┩
+│ PARENT      │  3   │   I-0   │   ✓   │    0.920 │ none                            │ full   │    0.5 │  $0.020 │ 6.8m │
+│ Archive-1   │  2   │   I-0   │   ✓   │    0.921 │ none                            │ full   │    0.5 │  $0.014 │ 5.6m │
+│ Archive-2   │  1   │   I-0   │   ✓   │    0.886 │ none                            │ full   │    0.5 │  $0.008 │ 3.9m │
+│ Archive-3   │  0   │   I-0   │   ✓   │    0.454 │ initial_program                 │ init   │    0.1 │  $0.000 │ 3.3m │
+└─────────────┴──────┴─────────┴───────┴──────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────┘
+[2025-11-21 17:09:39,133][httpx][INFO] - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+[2025-11-21 17:09:40,047][httpx][INFO] - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+[2025-11-21 17:09:40,056][shinka.core.novelty_judge][INFO] - Top-5 similarity scores: ['0.99', '0.99', '0.98', '0.74']
+[2025-11-21 17:09:40,056][shinka.core.novelty_judge][INFO] - NOVELTY CHECK 1/3: Accepting program due to low similarity (0.990 <= 1.0)
+[2025-11-21 17:14:38,818][shinka.database.dbase][INFO] - Program b13b6b74-2f17-4720-a226-de6d45bc2838 added to DB - score: 0.9291111111111112.
+[2025-11-21 17:14:38,820][shinka.database.dbase][INFO] - New best program: b13b6b74-2f17-4720-a226-de6d45bc2838 (gen: 2 → 4, score: 0.9213 → 0.9291, island: 0 → 0)
+[2025-11-21 17:14:38,821][shinka.database.dbase][INFO] - Recomputing PCA-reduced embedding features for 5 programs.
+[2025-11-21 17:14:39,473][shinka.database.dbase][INFO] - Successfully updated embedding features for 5 programs.
+                                           Program Evaluation Summary - Gen 4                                           
+╭─────────────┬─────────┬───────────────┬─────────┬─────────────────────────────────┬────────┬────────┬─────────┬──────╮
+│  GenID: 4   │ Island  │    Status     │   Score │ Patch Name                      │ Type   │ Compl… │    Cost │ Time │
+├─────────────┼─────────┼───────────────┼─────────┼─────────────────────────────────┼────────┼────────┼─────────┼──────┤
+│ Best: 0.929 │   I-0   │   ✓ Correct   │   0.929 │ none                            │ full   │    0.5 │  $0.026 │ 5.0m │
+╰─────────────┴─────────┴───────────────┴─────────┴─────────────────────────────────┴────────┴────────┴─────────┴──────╯
+[2025-11-21 17:14:39,476][shinka.core.summarizer][INFO] - Added program b13b6b74-2f17-4720-a226-de6d45bc2838 to meta memory tracking (correct=True, total: 5)
+[2025-11-21 17:14:39,476][shinka.database.dbase][INFO] - Database state committed. Last iteration: 4. Best: b13b6b74-2f17-4720-a226-de6d45bc2838
+[2025-11-21 17:14:39,512][shinka.core.summarizer][INFO] - Saved meta state to results/nikkei_shock/2025.11.21164746_example/meta_memory.json: 5 unprocessed programs, summary: No, scratchpad: No, recommendations: No, history: 0 items
+[2025-11-21 17:14:39,517][shinka.core.runner][INFO] - All generations completed, exiting...
+[2025-11-21 17:14:39,519][shinka.core.summarizer][INFO] - No meta LLM client configured, skipping final summary
+[2025-11-21 17:14:39,543][shinka.core.summarizer][INFO] - Saved meta state to results/nikkei_shock/2025.11.21164746_example/meta_memory.json: 5 unprocessed programs, summary: No, scratchpad: No, recommendations: No, history: 0 items
+        Program Database Summary                       Best Program                         Cost & Stats Summary          
+╭──────────────────────┬───────────────╮ ╭────────────────┬─────────────────────╮ ╭────────────────────────┬─────────────╮
+│ Metric               │ Value         │ │ Attribute      │ Value               │ │ Metric                 │ Value       │
+├──────────────────────┼───────────────┤ ├────────────────┼─────────────────────┤ ├────────────────────────┼─────────────┤
+│ Overall Best Score   │ 0.93          │ │ ID             │ b13b6b74...         │ │ Total API Cost         │ $0.07       │
+│ Total Programs       │ 5             │ │ Generation     │ 4                   │ │ Total Embedding Cost   │ $0.00       │
+│ Correct Programs     │ 5 / 5 (100%)  │ │ Complexity     │ 0.46                │ │ Total Novelty Cost     │ $0.00       │
+│ Archived Programs    │ 5 / 20 (25%)  │ │ Embedding[0]   │ -0.04               │ │ Total Meta Cost        │ $0.00       │
+│ Island Populations   │ I0: 5         │ │ Metric: Score  │ 0.93                │ │ Total Combined Cost    │ $0.07       │
+│ Migration Policy     │ 10G, 0%(E)    │ │ Timestamp      │ 2025-11-21 17:14:38 │ │ Avg $/Program          │ $0.01       │
+╰──────────────────────┴───────────────╯ ╰────────────────┴─────────────────────╯ │ Total Compute          │ 0h 24m 40s  │
+                                                                                  │ Avg Score              │ 0.82        │
+                                                                                  │ Best Score             │ 0.93        │
+                                                                                  │ Median Score           │ 0.92        │
+                                                                                  ╰────────────────────────┴─────────────╯
+                                            Top 10 Best Performing Programs                                             
+╭──────┬──────┬────┬────────┬──────────┬────────────────────────────────┬────────┬────────┬────────┬───────────────────╮
+│ Rank │ Gen  │ ✓… │  Score │ Complex… │ Patch Name                     │ Type   │ Island │ Child… │ Timestamp         │
+├──────┼──────┼────┼────────┼──────────┼────────────────────────────────┼────────┼────────┼────────┼───────────────────┤
+│  #1  │  4   │ ✓  │  0.929 │      0.5 │ none                           │ full   │   I0   │      0 │ 2025-11-21        │
+│      │      │    │        │          │                                │        │        │        │ 17:14:38          │
+├──────┼──────┼────┼────────┼──────────┼────────────────────────────────┼────────┼────────┼────────┼───────────────────┤
+│  #2  │  2   │ ✓  │  0.921 │      0.5 │ none                           │ full   │   I0   │      1 │ 2025-11-21        │
+│      │      │    │        │          │                                │        │        │        │ 17:01:34          │
+├──────┼──────┼────┼────────┼──────────┼────────────────────────────────┼────────┼────────┼────────┼───────────────────┤
+│  #3  │  3   │ ✓  │  0.920 │      0.5 │ none                           │ full   │   I0   │      1 │ 2025-11-21        │
+│      │      │    │        │          │                                │        │        │        │ 17:09:04          │
+├──────┼──────┼────┼────────┼──────────┼────────────────────────────────┼────────┼────────┼────────┼───────────────────┤
+│  #4  │  1   │ ✓  │  0.886 │      0.5 │ none                           │ full   │   I0   │      1 │ 2025-11-21        │
+│      │      │    │        │          │                                │        │        │        │ 16:55:30          │
+├──────┼──────┼────┼────────┼──────────┼────────────────────────────────┼────────┼────────┼────────┼───────────────────┤
+│  #5  │  0   │ ✓  │  0.454 │      0.1 │ initial_program                │ init   │   I0   │      1 │ 2025-11-21        │
+│      │      │    │        │          │                                │        │        │        │ 16:51:07          │
+╰──────┴──────┴────┴────────┴──────────┴────────────────────────────────┴────────┴────────┴────────┴───────────────────╯
+[2025-11-21 17:14:39,564][shinka.core.runner][INFO] - Evolution completed! 5 generations
+[2025-11-21 17:14:39,564][shinka.core.runner][INFO] - ================================================================================
+[2025-11-21 17:14:39,564][shinka.core.runner][INFO] - Evolution run ended at 2025-11-21 17:14:39
+[2025-11-21 17:14:39,564][shinka.core.runner][INFO] - ================================================================================
+(ShinkaEvolve-FE) > 
