@@ -1,8 +1,7 @@
 """We can also use shinka_visualize --port 8888 to visualize the results in a browser."""
 import argparse
 import matplotlib.pyplot as plt
-from numpy import block
-from shinka.plots import plot_improvement, plot_lineage_tree
+from shinka.plots import plot_improvement
 from shinka.utils import load_programs_to_df
 
 
