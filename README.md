@@ -42,6 +42,8 @@ The architecture is intentionally minimal but extensible.
 
 # Architecture Overview
 
+![Architecture Diagram](examples/nikkei_shock/images/ShinkaEvolve-FE_Workflow.jpg)
+
 The system consists of five roles:
 
 1. **Quant Optimizer**

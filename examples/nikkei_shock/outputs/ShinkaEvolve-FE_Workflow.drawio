@@ -1,9 +1,12 @@
 <mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.0.3 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36" version="29.0.3">
   <diagram name="Page-1" id="IVcT-eGqHwD-mH_p0L6d">
-    <mxGraphModel dx="1218" dy="829" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+    <mxGraphModel dx="796" dy="705" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
+        <mxCell id="u1-b_92-b_0Lp_B2-w-29" value="&lt;font&gt;&lt;b&gt;ShinkaEvolve-FE Evolution Loop&lt;/b&gt;&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;strokeWidth=2;dashed=1;verticalAlign=top;fontSize=22;" parent="1" vertex="1">
+          <mxGeometry x="22" y="80" width="779" height="580" as="geometry" />
+        </mxCell>
         <mxCell id="u1-b_92-b_0Lp_B2-w-1" value="&lt;b&gt;Coder LLM&lt;/b&gt;&lt;div&gt;(e.g., gpt-4.1-mini)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
           <mxGeometry x="210" y="146" width="140" height="60" as="geometry" />
         </mxCell>
@@ -90,8 +93,11 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
+        <mxCell id="AIhq9EKzlR1uvaaPqS3M-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="u1-b_92-b_0Lp_B2-w-19" target="u1-b_92-b_0Lp_B2-w-7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
         <mxCell id="u1-b_92-b_0Lp_B2-w-19" value="&lt;div&gt;&lt;b&gt;Quant Data&lt;/b&gt;&lt;/div&gt;&lt;div&gt;(P&amp;amp;L, Shocks)&lt;/div&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
-          <mxGeometry x="450" y="285" width="110" height="70" as="geometry" />
+          <mxGeometry x="450" y="283" width="110" height="70" as="geometry" />
         </mxCell>
         <mxCell id="u1-b_92-b_0Lp_B2-w-20" value="Generates" style="endArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;entryX=0;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;exitDx=0;exitDy=0;" parent="1" source="u1-b_92-b_0Lp_B2-w-4" target="u1-b_92-b_0Lp_B2-w-19" edge="1">
           <mxGeometry x="-0.04" y="12" width="50" height="50" relative="1" as="geometry">
@@ -131,11 +137,30 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="u1-b_92-b_0Lp_B2-w-29" value="&lt;font&gt;&lt;b&gt;ShinkaEvolve-FE Evolution Loop&lt;/b&gt;&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;strokeWidth=2;dashed=1;verticalAlign=top;fontSize=22;" parent="1" vertex="1">
-          <mxGeometry x="22" y="80" width="779" height="580" as="geometry" />
-        </mxCell>
         <mxCell id="u1-b_92-b_0Lp_B2-w-4" value="&lt;b&gt;Quant Optimizer&lt;/b&gt;&lt;div&gt;(quant_utils.py)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
-          <mxGeometry x="210" y="290" width="140" height="60" as="geometry" />
+          <mxGeometry x="210" y="288" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="AIhq9EKzlR1uvaaPqS3M-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="u1-b_92-b_0Lp_B2-w-21" target="u1-b_92-b_0Lp_B2-w-7">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="460" />
+              <mxPoint x="610" y="318" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="AIhq9EKzlR1uvaaPqS3M-3" value="Input" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="AIhq9EKzlR1uvaaPqS3M-1">
+          <mxGeometry x="-0.2785" y="-1" relative="1" as="geometry">
+            <mxPoint x="57" y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="AIhq9EKzlR1uvaaPqS3M-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="u1-b_92-b_0Lp_B2-w-21" target="u1-b_92-b_0Lp_B2-w-11">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="460" />
+              <mxPoint x="610" y="537" />
+              <mxPoint x="684" y="537" />
+            </Array>
+          </mxGeometry>
         </mxCell>
         <mxCell id="u1-b_92-b_0Lp_B2-w-21" value="&lt;b&gt;Scenario&lt;/b&gt;&lt;div&gt;(scenarios.yaml)&lt;/div&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
           <mxGeometry x="210" y="425" width="140" height="70" as="geometry" />
