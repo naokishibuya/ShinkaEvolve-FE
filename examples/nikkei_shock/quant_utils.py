@@ -60,14 +60,15 @@ def optimize_worst_case_shock(
         return pnl_summary.net.total
 
     def constraint(x):
-        return 0 if stats.max_joint_sigma > calculate_joint_sigma(x) else -1
+        # Inequality constraint: returns positive if valid, negative if invalid
+        return stats.max_joint_sigma - calculate_joint_sigma(x)
 
     result = minimize(
         objective,
         x0=np.array([0.0, 0.0, 0.0, 0.0], dtype=float),
         method='COBYLA',
         bounds=[(-stats.max_factor_sigma, stats.max_factor_sigma)] * 4,
-        constraints=[{'type': 'eq', 'fun': constraint}],
+        constraints=[{'type': 'ineq', 'fun': constraint}],
         options={
             'maxiter': 5000,
             'disp': True,
