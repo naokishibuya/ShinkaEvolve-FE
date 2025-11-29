@@ -1,0 +1,75 @@
+<causal_depth_and_integration>
+<DESCRIPTION>
+Enhance the prompt to explicitly instruct the analyst LLM to deeply connect quantitative data (Greeks, shocks, P&L) with causal hedge philosophy critique and to fully integrate multi-factor and cross-asset interactions. Add explicit emphasis on avoiding generic statements, requiring a cohesive causal narrative that ties hedge assumptions, crisis regime violations, and structural weaknesses together. Also, prompt the analyst to produce actionable, scenario-specific recommendations tightly linked to the causal analysis. These adjustments target the recurring gaps noted in reviews for deeper philosophical critique, integrated factor analysis, and specific advice, thus improving analysis quality and combined score.
+</DESCRIPTION>
+
+<DIFF>
+<<<<<<< SEARCH
+    # Brief instructions to analyst emphasizing causal narrative, hedge assumptions, and multi-factor interactions
+    prompt = f"""
+You are an experienced financial risk analyst tasked with producing a detailed hedge-weakness analysis for a crisis stress scenario. Using the data below, write a clear, structured, scenario-specific narrative analysis that explicitly:
+
+1. Portfolio Exposures:
+   - Identify and explain the main portfolio exposures, referencing specific instruments by name and their Greeks.
+   - Distinguish between exposure and hedge contributions to risks and sensitivities.
+   - Quantify net portfolio sensitivities (delta, gamma, vega, FX, DV01).
+
+2. Hedge Intent and Assumptions:
+   - Explain the primary purpose and risk protection goals of each hedge instrument.
+   - Articulate the implicit assumptions embedded in the hedge design, e.g., expected factor correlations, volatility regimes, or directional moves.
+   - Describe how the hedge instruments are expected to behave under normal and crisis conditions.
+
+3. Crisis Shock Scenario Analysis:
+   - Characterize the worst-case shock in terms of factor directions, magnitudes, and joint severity (Mahalanobis distance).
+   - Explain how factor volatilities and crisis correlations shape the shock’s impact.
+   - Highlight which factor moves are particularly damaging relative to the portfolio’s sensitivities.
+
+4. Loss Drivers and Structural Weaknesses:
+   - Analyze how linear (delta) and nonlinear (gamma, vega) exposures contribute to losses.
+   - Explain how the shock scenario violates the hedge assumptions or exploits structural vulnerabilities.
+   - Discuss cross-asset and multi-factor interactions, including correlation effects that amplify losses or reduce hedge effectiveness.
+   - Reference specific instruments and P&L contributions that demonstrate hedge underperformance or failure.
+
+5. Recommendations and Risk Insights:
+   - Suggest risk mitigation strategies based on the identified structural weaknesses.
+   - Discuss how improved hedge design or diversification could reduce vulnerability in similar stress scenarios.
+
+Important: Use concrete numbers and sensitivities from the data below to support your analysis. Avoid generic or template-like language. Your analysis must be deeply causal, explaining why and how the portfolio’s hedge overlay breaks down under this specific crisis scenario.
+
+-----
+=======
+    # Brief instructions to analyst emphasizing causal narrative, hedge assumptions, and multi-factor interactions
+    prompt = f"""
+You are an experienced financial risk analyst tasked with producing a deeply insightful hedge-weakness analysis for a complex crisis stress scenario. Using the data below, write a clear, structured, scenario-specific narrative analysis that explicitly:
+
+1. Portfolio Exposures:
+   - Identify and explain the main portfolio exposures in detail, referencing specific instrument names and their Greeks.
+   - Distinguish clearly between exposure and hedge contributions to portfolio sensitivities and risks.
+   - Quantify net portfolio Greeks (delta, gamma, vega, FX, DV01), and relate these to instrument-level exposures.
+
+2. Hedge Intent and Implicit Assumptions:
+   - Explain the primary risk protection objectives of each hedge instrument.
+   - Articulate the implicit assumptions embedded in the hedge design, such as expected crisis factor correlations, volatility regimes, and directional dependencies.
+   - Describe the expected behavior of hedge instruments under both normal and crisis conditions, emphasizing assumed factor relationships.
+
+3. Crisis Shock Scenario Analysis:
+   - Characterize the worst-case shock scenario in factor directions, magnitudes, and joint severity (Mahalanobis distance).
+   - Explain how factor volatilities and crisis correlations shape the impact on the portfolio.
+   - Identify which factor moves are particularly damaging given the portfolio's sensitivities and why.
+
+4. Loss Drivers and Structural Weaknesses:
+   - Analyze how linear (delta) and nonlinear (gamma, vega) exposures contribute to losses in detail.
+   - Provide a causal explanation of how the shock scenario violates the hedge assumptions or exploits structural vulnerabilities.
+   - Thoroughly discuss cross-asset and multi-factor interactions, including how crisis correlations either amplify losses or reduce hedge effectiveness.
+   - Reference specific instruments and P&L components to demonstrate hedge underperformance or failure, connecting these to the causal narrative.
+
+5. Recommendations and Risk Insights:
+   - Provide actionable, scenario-specific risk mitigation strategies that directly follow from the identified structural weaknesses.
+   - Discuss how hedge redesign or diversification can address the precise causal mechanisms of vulnerability revealed in the analysis.
+
+Important: Ground your analysis firmly in the quantitative data—reference concrete numbers, Greeks, shocks, and P&L figures. Avoid generic or template-like statements. Your narrative must be deeply causal and integrative, explaining precisely why and how this portfolio's hedge overlay breaks down under this specific multi-factor crisis scenario. Emphasize the interplay of factor moves, correlations, and hedge instrument behavior to provide a comprehensive structural critique and clear, tailored recommendations.
+
+-----
+>>>>>>> REPLACE
+
+</DIFF>

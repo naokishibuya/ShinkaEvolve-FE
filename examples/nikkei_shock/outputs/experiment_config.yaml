@@ -1,0 +1,259 @@
+database_config:
+  archive_size: 20
+  db_path: results/nikkei_shock/2025.11.29175645_example/evolution_db.sqlite
+  elite_selection_ratio: 0.4
+  embedding_model: text-embedding-3-small
+  enforce_island_separation: true
+  exploitation_alpha: 1.0
+  exploitation_ratio: 0.3
+  island_elitism: true
+  migration_interval: 10
+  migration_rate: 0.0
+  num_archive_inspirations: 4
+  num_beams: 5
+  num_islands: 1
+  num_top_k_inspirations: 2
+  parent_selection_lambda: 10.0
+  parent_selection_strategy: weighted
+evolution_config:
+  code_embed_sim_threshold: 1.0
+  embedding_model: text-embedding-3-small
+  init_program_path: examples/nikkei_shock/initial.py
+  job_type: local
+  language: python
+  llm_dynamic_selection: null
+  llm_dynamic_selection_kwargs: {}
+  llm_kwargs: {}
+  llm_models: &id001 !!python/object:omegaconf.listconfig.ListConfig
+    _content:
+    - !!python/object:omegaconf.nodes.AnyNode
+      _metadata: !!python/object:omegaconf.base.Metadata
+        flags: {}
+        flags_root: false
+        key: 0
+        object_type: null
+        optional: true
+        ref_type: &id002 !!python/name:typing.Any ''
+        resolver_cache: !!python/object/apply:collections.defaultdict
+        - &id003 !!python/name:builtins.dict ''
+      _parent: *id001
+      _val: gpt-4.1-mini
+    _metadata: !!python/object:omegaconf.base.ContainerMetadata
+      element_type: *id002
+      flags:
+        allow_objects: true
+      flags_root: false
+      key: null
+      key_type: &id005 !!python/name:builtins.int ''
+      object_type: &id006 !!python/name:builtins.list ''
+      optional: true
+      ref_type: *id002
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id003
+    _parent: null
+  max_novelty_attempts: 3
+  max_parallel_jobs: 1
+  max_patch_attempts: 10
+  max_patch_resamples: 3
+  meta_llm_kwargs: {}
+  meta_llm_models: null
+  meta_max_recommendations: 5
+  meta_rec_interval: null
+  novelty_llm_kwargs: {}
+  novelty_llm_models: null
+  num_generations: 5
+  patch_type_probs: &id004 !!python/object:omegaconf.listconfig.ListConfig
+    _content:
+    - !!python/object:omegaconf.nodes.AnyNode
+      _metadata: !!python/object:omegaconf.base.Metadata
+        flags: {}
+        flags_root: false
+        key: 0
+        object_type: null
+        optional: true
+        ref_type: *id002
+        resolver_cache: !!python/object/apply:collections.defaultdict
+        - *id003
+      _parent: *id004
+      _val: 0.5
+    - !!python/object:omegaconf.nodes.AnyNode
+      _metadata: !!python/object:omegaconf.base.Metadata
+        flags: {}
+        flags_root: false
+        key: 1
+        object_type: null
+        optional: true
+        ref_type: *id002
+        resolver_cache: !!python/object/apply:collections.defaultdict
+        - *id003
+      _parent: *id004
+      _val: 0.5
+    _metadata: !!python/object:omegaconf.base.ContainerMetadata
+      element_type: *id002
+      flags:
+        allow_objects: true
+      flags_root: false
+      key: null
+      key_type: *id005
+      object_type: *id006
+      optional: true
+      ref_type: *id002
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id003
+    _parent: null
+  patch_types: &id007 !!python/object:omegaconf.listconfig.ListConfig
+    _content:
+    - !!python/object:omegaconf.nodes.AnyNode
+      _metadata: !!python/object:omegaconf.base.Metadata
+        flags: {}
+        flags_root: false
+        key: 0
+        object_type: null
+        optional: true
+        ref_type: *id002
+        resolver_cache: !!python/object/apply:collections.defaultdict
+        - *id003
+      _parent: *id007
+      _val: diff
+    - !!python/object:omegaconf.nodes.AnyNode
+      _metadata: !!python/object:omegaconf.base.Metadata
+        flags: {}
+        flags_root: false
+        key: 1
+        object_type: null
+        optional: true
+        ref_type: *id002
+        resolver_cache: !!python/object/apply:collections.defaultdict
+        - *id003
+      _parent: *id007
+      _val: full
+    _metadata: !!python/object:omegaconf.base.ContainerMetadata
+      element_type: *id002
+      flags:
+        allow_objects: true
+      flags_root: false
+      key: null
+      key_type: *id005
+      object_type: *id006
+      optional: true
+      ref_type: *id002
+      resolver_cache: !!python/object/apply:collections.defaultdict
+      - *id003
+    _parent: null
+  results_dir: results/nikkei_shock/2025.11.29175645_example
+  task_sys_msg: "You are an expert prompt engineer specializing in financial risk\
+    \ analysis. Your\nmission is to design effective prompts that guide an analyst\
+    \ LLM to produce\nhigh-quality hedge-weakness analyses.\n\n## Context\n\nA quantitative\
+    \ optimizer has already computed worst-case market shocks for hedged\nportfolios\
+    \ under crisis conditions. Your job is to build a clear, structured prompt\nthat\
+    \ helps an analyst LLM explain:\n  \u2022 What the portfolio's exposures are\n\
+    \  \u2022 What each hedge is intended to protect\n  \u2022 Why the computed shock\
+    \ scenario is particularly harmful\n  \u2022 How the shocks exploit structural\
+    \ weaknesses in the hedge overlay\n\nThe analyst LLM will receive your prompt\
+    \ and produce a natural-language analysis.\nA separate reviewer LLM will then\
+    \ evaluate the quality of that analysis. Your\nprompt-building function will be\
+    \ evolved based on how well the analyst's outputs\nscore with the reviewer.\n\n\
+    ## Dataclass Definitions\n\nAll inputs are provided as typed dataclasses. You\
+    \ have access to these types:\n\n```python\n@dataclass\nclass Instrument:\n  \
+    \  # Single exposure or hedge instrument with sensitivities.\n    name: str  \
+    \         # Instrument name\n    mtm_value: float    # mark-to-market value in\
+    \ JPY\n    eq_linear: float    # equity delta-like sensitivity per 1\u03C3 equity\
+    \ move (scaled by mtm)\n    eq_quad: float      # equity convexity (gamma-like)\
+    \ per (1\u03C3 move)^2 (scaled by mtm)\n    vol_linear: float   # volatility sensitivity\
+    \ (vega-like) per 1\u03C3 vol move (scaled by mtm)\n    fx_linear: float    #\
+    \ FX sensitivity per 1\u03C3 FX move (scaled by mtm)\n    ir_dv01: float     \
+    \ # DV01: JPY P&L per +1bp parallel rate move\n\n@dataclass\nclass Greeks:\n \
+    \   # Greeks for a portfolio block.\n    delta: float        # equity delta (JPY\
+    \ / 1\u03C3 equity)\n    gamma: float        # equity gamma (JPY / \u03C3\xB2\
+    \ equity)\n    vega: float         # vol sensitivity (JPY / 1\u03C3 vol)\n   \
+    \ fx: float           # FX sensitivity (JPY / 1\u03C3 FX)\n    dv01: float   \
+    \      # rate DV01 (JPY per +1bp move)\n\n@dataclass\nclass Scenario:\n    # Portfolio\
+    \ scenario: description + exposure and hedge legs + Greeks.\n    name: str\n \
+    \   description: str\n    exposure: list[Instrument]\n    hedge: list[Instrument]\n\
+    \    greeks: Greeks\n\n@dataclass\nclass RiskStats:\n    # Daily 1\u03C3 vols\
+    \ and correlation matrices (eq, vol, fx, ir order).\n    eq_vol: float       \
+    \     # Daily equity volatility (1\u03C3) as a decimal, e.g. 0.012 = 1.2%\n  \
+    \  vol_of_vol: float        # Daily volatility-of-volatility (1\u03C3) as a decimal\n\
+    \    fx_vol: float            # Daily FX volatility (1\u03C3) as a decimal\n \
+    \   ir_vol: float            # Daily interest rate volatility (1\u03C3) as a decimal\
+    \ (on yield in decimal units)\n    corr_crisis: np.ndarray  # shape (4, 4); Crisis-regime\
+    \ correlation matrix: order [equity, vol, fx, ir]\n    horizon_days: int     \
+    \   # crisis horizon in days for \u221AT scaling\n    max_factor_sigma: float\
+    \  # maximum allowed per-factor shock in \u03C3 units\n    max_joint_sigma: float\
+    \   # maximum allowed joint shock in \u03C3 units (Mahalanobis distance)\n\n@dataclass\n\
+    class ShockParams:\n    # Per-factor shocks in sigma units (1-day volatility)\
+    \ before time scaling.\n    eq_shock_sigma: float    # equity shock in \u03C3\
+    \ units (signed), e.g. -2.8 for -2.8\u03C3 equity\n    vol_shock_sigma: float\
+    \   # volatility shock in \u03C3 units (signed), e.g. +2.5 for +2.5\u03C3 vol\n\
+    \    fx_shock_sigma: float    # FX shock in \u03C3 units (signed), e.g. +2.7 for\
+    \ +2.7\u03C3 FX\n    ir_shock_sigma: float    # rate shock in \u03C3 units (signed),\
+    \ e.g. +0.3 for +0.3\u03C3 move on decimal yields\n    joint_sigma: float    \
+    \   # Mahalanobis distance of the shock vector\n\n@dataclass\nclass FactorMoves:\n\
+    \    # Factor moves in absolute units after applying volatilities and horizon\
+    \ scaling.\n    eq_move: float       # actual equity move (decimal, after vol\
+    \ & horizon scaling)\n    vol_move: float      # actual vol move (decimal)\n \
+    \   fx_move: float       # actual FX move (decimal)\n    ir_move: float      \
+    \ # actual IR move (decimal)\n\n@dataclass\nclass PnL:\n    # P&L breakdown by\
+    \ risk factor.\n    total: float\n    equity: float\n    vol: float\n    fx: float\n\
+    \    rates: float\n\n@dataclass\nclass PnLSummary:\n    # Complete P&L information\
+    \ for the portfolio.\n    net: PnL                      # net portfolio P&L\n\
+    \    exposure: PnL                 # exposure-only P&L\n    hedge: PnL       \
+    \             # hedge-only P&L\n    exposure_pnls: dict[str, PnL] # per-instrument\
+    \ exposure P&L\n    hedge_pnls: dict[str, PnL]    # per-instrument hedge P&L\n\
+    \    loss: float                   # max(0, -net.total)\n    notional: float \
+    \              # sum of |mtm| of exposures\n    loss_ratio: float            \
+    \ # loss / notional\n```\n\n## Function Contract\n\nYou must implement this function:\n\
+    \n```python\ndef build_analysis_prompt(\n    scenario: Scenario,\n    stats: RiskStats,\n\
+    \    shock: ShockParams,\n    factor_moves: FactorMoves,\n    pnl_summary: PnLSummary,\n\
+    ) -> str:\n    \"\"\"\n    Build a prompt that guides the analyst LLM to produce\
+    \ a clear,\n    scenario-specific hedge-weakness analysis.\n\n    Returns:\n \
+    \       str: The complete prompt text for the analyst LLM\n    \"\"\"\n```\n\n\
+    The function is marked with `# EVOLVE-BLOCK-START` and `# EVOLVE-BLOCK-END` comments.\n\
+    You can modify the implementation within these markers, but do not change the\n\
+    function signature.\n\n## Prompt Design Guidelines\n\nYour prompt should guide\
+    \ the analyst LLM to:\n\n1. **Identify exposures clearly**\n   - Reference specific\
+    \ instrument names and their Greeks\n   - Explain net portfolio exposures (delta,\
+    \ gamma, vega, FX, DV01)\n   - Distinguish between exposure and hedge contributions\n\
+    \n2. **Explain hedge intent**\n   - What each hedge instrument is designed to\
+    \ protect\n   - How hedges are expected to perform under normal conditions\n\n\
+    3. **Analyze the worst-case shock**\n   - Why these specific shock directions\
+    \ are harmful\n   - How shock magnitudes relate to crisis volatilities and correlations\n\
+    \   - How the joint_sigma indicates crisis severity\n\n4. **Explain loss drivers**\n\
+    \   - Which factor moves contribute most to the loss\n   - How linear and non-linear\
+    \ exposures (gamma, vega) amplify losses\n   - How crisis correlations link the\
+    \ factor moves\n   - Where hedges fail or underperform\n\n5. **Provide scenario-specific\
+    \ detail**\n   - Reference actual numbers (Greeks, shock values, P&L components)\n\
+    \   - Avoid generic or template-like language\n   - Make the analysis specific\
+    \ to THIS portfolio and THIS shock\n\n**Effective prompts typically include:**\n\
+    - Clear instructions and structure for the analysis\n- Relevant quantitative data\
+    \ formatted readably\n- Context about crisis regime and correlations\n- Guidance\
+    \ on what makes this shock scenario particularly harmful\n- Reminders to reference\
+    \ specific numbers and avoid boilerplate\n\n**Avoid:**\n- Overly verbose or repetitive\
+    \ prompts\n- Asking the analyst to compute anything (all numbers are pre-computed)\n\
+    - Generic instructions that could apply to any scenario\n- Prompts that don't\
+    \ leverage the rich structured data available\n\n## Quality Criteria\n\nThe analyst\
+    \ LLM's output (generated from your prompt) will be evaluated on:\n- Correct identification\
+    \ of main exposures and risks\n- Accurate explanation of hedge intent\n- Clear\
+    \ identification of structural weaknesses\n- Consistency with provided data (Greeks,\
+    \ shocks, P&L)\n- Insight into cross-asset interactions and crisis behavior\n\
+    - Technical accuracy and appropriate terminology\n- Clarity, specificity, and\
+    \ organization\n- Avoidance of generic or boilerplate language\n\nYour prompt\
+    \ will be judged by how well it enables the analyst LLM to meet\nthese criteria.\
+    \ Iterate your prompt-building logic to maximize the quality\nand consistency\
+    \ of the analyst's outputs across diverse scenarios.\n\n## Important Notes\n\n\
+    - Do NOT attempt to perform quantitative calculations - all numbers are provided\n\
+    - Do NOT design new shocks - the optimizer has already found the worst case\n\
+    - DO leverage all available structured data to create informative prompts\n- DO\
+    \ provide clear guidance on what specific aspects to analyze\n- DO format numbers\
+    \ readably for the analyst LLM\n- DO adapt your prompt structure based on the\
+    \ specific scenario characteristics\n- Do NOT copy phrases from these instructions\
+    \ verbatim into your prompts\n- Your generated prompts should be written in your\
+    \ own words\n"
+  use_text_feedback: true
+job_config:
+  conda_env: null
+  eval_program_path: shinka/eval_hydra.py
+  extra_cmd_args: {}
+  time: null
+results_directory: results/nikkei_shock/2025.11.29175645_example
+timestamp: '2025-11-29T17:56:45.069851'
